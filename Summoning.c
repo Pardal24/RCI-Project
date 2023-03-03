@@ -28,6 +28,7 @@ char *My_IP()
 
 int main(int argc, char *argv[])
 {
+    char *Ip, *TCP, *regIP, *regUDP, *type;
 
     if (argc != 5)
     {
@@ -51,9 +52,15 @@ int main(int argc, char *argv[])
             printf("Please incert in regUDP: reg59000\n");
             exit(0);
         }
+        Ip = argv[1];
+        TCP = argv[2];
+        regIP = argv[3];
+        regUDP = argv[4];
+
         printf("Welcome to the server please select your next command from this list:\n -join net id\n -djoin net id bootid bootIP bootTCP\n"
                " -create name\n -delete name\n -get dest name\n -show topology (st)\n -show names (sn)\n -show routing (sr)\n -leave\n -exit\n");
     }
-
+    type = getchar();
+    printf("%s", type);
     exit(0);
 }
