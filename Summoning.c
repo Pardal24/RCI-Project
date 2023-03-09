@@ -115,7 +115,7 @@ int main(int argc, char *argv[])
 
     if (argc != 5)
     {
-        printf("Number of arguments is wrong, you are wrong\n Call the program with: cot IP TCP regIP(reg193.136.138.142) regUDP(reg59000)\n");
+        printf("Number of arguments is wrong, you are wrong\n Call the program with: cot IP TCP regIP(193.136.138.142) regUDP(59000)\n");
         exit(0);
     }
     else
@@ -127,7 +127,7 @@ int main(int argc, char *argv[])
 
         if (strcmp(argv[1], My_IP()) != 0) // Caso o utilizador não saiba o seu id devolver o id dele
         {
-            printf("Your IP is: %s\n", My_IP());
+            printf("Your IP is: %s\n", My_IP()); // ver qual o ip a usar
             exit(0);
         }
         if (strcmp(reg_ip, "193.136.138.142") != 0)
