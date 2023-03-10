@@ -56,32 +56,78 @@ char *udp_communication(char *IP_server, char *port, char *msg)
     char host[NI_MAXHOST], service[NI_MAXSERV]; // consts in <netdb.h>
     /*...*/                                     // see previous task code
     addrlen = sizeof(addr);
-    printf("tou ca");
+
     n = recvfrom(fd, buffer, 128, 0, &addr, &addrlen);
     if (n == -1) /*error*/
         exit(1);
     buffer[n] = '\0';
-    printf("echo: %s\n", buffer);
-    strcpy(msg_rcv, buffer);
+    msg_rcv = buffer;
     close(fd);
     return msg_rcv;
 }
 
-void join(char *net, int id, char *regIP, char *regUDP)
+void join(char *net, char *id, char *regIP, char *regUDP)
 {
-    printf("tou no join");
     char *msg_send, *msg_recv;
     sprintf(msg_send, "NODES %s", net);
-    strcpy(msg_recv, udp_communication(regIP, regUDP, msg_send));
+    msg_recv = udp_communication(regIP, regUDP, msg_send);
     printf("%s\n", msg_recv);
+}
+
+// int leave()
+// {
+
+//     // 1 - apagar o seu contacto do servidor de nós
+//     // UNREG net id - mensagem de retiro da rede
+//     // receber OKUNREG do servidor
+//     // 2 - terminar as sessões TCP com todos os seus vizinhos (há lista de vizinhos)?
+// }
+
+void commands(char *input, char *reg_ip, char *reg_udp)
+{
+    char *action, *net, *id;
+    action = strtok(input, " ");
+
+    if (strcmp(action, "join") == 0)
+    {
+        net = strtok(NULL, " ");
+        id = strtok(NULL, " ");
+        join(net, id, reg_ip, reg_udp);
+    }
+
+    // if (strcmp(action, "join") == 0)
+    // {
+    //     action = strtok(NULL, " ");
+
+    //     if (strcmp(action, "net") == 0)
+    //     {
+    //         action = strtok(NULL, " ");
+    //         if (strcmp(action, "id") == 0)
+    //         {
+    //             join(net, id, reg_ip, reg_udp); // Falta ainda perceber onde raio vai perguntar sobre os nos que estao la
+    //         }
+    //         // else if (strcmp(action, "djoin") == 0)
+    //         // {
+    //         //     scanf("%s %d %d %s %d", net, &id, &bootid, bootIP, &bootTCP);
+    //         //     djoin(net, id, 0, 0);
+    //         // }
+    //         // else if (strcmp(action, "create") == 0)
+    //         // {
+    //         //     scanf("%s", name);
+    //         // }
+    //         // else
+    //         // {
+    //         //     printf("Invalid input\n");
+    //         // }
+    //     }
+    // }
 }
 
 int tcp_listener(char *port)
 {
-    int port_tcp;
-
-    port_tcp = atoi(port);
+    int port_tcp = atoi(port);
     int fd = socket(AF_INET, SOCK_STREAM, 0);
+
     if (fd == -1)
     {
         perror("Error creating socket");
@@ -115,7 +161,7 @@ int main(int argc, char *argv[])
     char buffer[MAX_BUFFER_SIZE];
     int fd_listen, newfd, n;
     int client_count = 0, maxfd = 0, counter, i, id, bootid, bootTCP;
-    int *client_fds = NULL;
+    int *client_fds = NULL; // vetor de clientes
     struct sockaddr_in addr;
     fd_set rfds;
     socklen_t addrlen;
@@ -125,6 +171,7 @@ int main(int argc, char *argv[])
         printf("Number of arguments is wrong, you are wrong\n Call the program with: IP TCP regIP(193.136.138.142) regUDP(59000)\n");
         exit(0);
     }
+
     else
     {
         Ip = argv[1];
@@ -136,11 +183,13 @@ int main(int argc, char *argv[])
         {
             printf("Your IP is: %s\n", My_IP()); // ver qual o ip a usar
         }
+
         if (strcmp(reg_ip, "193.136.138.142") != 0)
         {
             printf("Please incert in regIP: 193.136.138.142\n");
             exit(0);
         }
+
         if (strcmp(argv[4], "59000") != 0)
         {
             printf("Please incert in regUDP: 59000\n");
@@ -155,12 +204,12 @@ int main(int argc, char *argv[])
 
     while (1)
     {
-        FD_ZERO(&rfds);
+        FD_ZERO(&rfds); // clear ao rfds
 
-        FD_SET(fd_listen, &rfds);
-        FD_SET(STDIN_FILENO, &rfds);
+        FD_SET(fd_listen, &rfds);    // vigia porta listen
+        FD_SET(STDIN_FILENO, &rfds); // vigia terminal
 
-        for (i = 0; i < client_count; i++)
+        for (i = 0; i < client_count; i++) // vigia canais TCP atuais
         {
             FD_SET(client_fds[i], &rfds);
             if (client_fds[i] > maxfd)
@@ -203,28 +252,33 @@ int main(int argc, char *argv[])
                 }
                 else
                 {
+                    commands(buffer, reg_ip, reg_udp);
+                    // action = strtok(buffer, " ");
 
-                    scanf("%s", action);
-                    printf("%s", action);
-                    // VAI PARA UMA FUNCAO
-                    if (strcmp(action, "join") == 0)
-                    {
-                        scanf("%s %d", net, &id);
-                        join(net, id, reg_ip, reg_udp); // Falta ainda perceber onde raio vai perguntar sobre os nos que estao la
-                    }
-                    // else if (strcmp(action, "djoin") == 0)
+                    // if (strcmp(action, "join") == 0)
                     // {
-                    //     scanf("%s %d %d %s %d", net, &id, &bootid, bootIP, &bootTCP);
-                    //     djoin(net, id, 0, 0);
-                    // }
-                    // else if (strcmp(action, "create") == 0)
-                    // {
-                    //     scanf("%s", name);
-                    // }
-                    else
-                    {
-                        printf("Invalid input\n");
-                    }
+                    //     action = strtok(NULL, " ");
+
+                    //     if (strcmp(action, "net") == 0)
+                    //     {
+                    //         action = strtok(NULL, " ");
+                    //         if (strcmp(action, "id") == 0)
+                    //         {
+                    //             join(net, id, reg_ip, reg_udp); // Falta ainda perceber onde raio vai perguntar sobre os nos que estao la
+                    //         }
+                    //         // else if (strcmp(action, "djoin") == 0)
+                    //         // {
+                    //         //     scanf("%s %d %d %s %d", net, &id, &bootid, bootIP, &bootTCP);
+                    //         //     djoin(net, id, 0, 0);
+                    //         // }
+                    //         // else if (strcmp(action, "create") == 0)
+                    //         // {
+                    //         //     scanf("%s", name);
+                    //         // }
+                    //         // else
+                    //         // {
+                    //         //     printf("Invalid input\n");
+                    //         // }
                     close(STDIN_FILENO);
                     counter--;
                 }
@@ -262,5 +316,5 @@ int main(int argc, char *argv[])
         }
     }
 
-    exit(0);
+    return 0;
 }
