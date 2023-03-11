@@ -66,12 +66,16 @@ char *udp_communication(char *IP_server, char *port, char *msg)
     return msg_rcv;
 }
 
-void join(char *net, char *id, char *regIP, char *regUDP)
+void join(char *net, char *id, char *regIP, char *regUDP, char *user_ip, char *user_tcp)
 {
-    char *msg_send, *msg_recv;
+    char msg_send[128], *msg_recv, *registo, *ok_reg;
     sprintf(msg_send, "NODES %s", net);
     msg_recv = udp_communication(regIP, regUDP, msg_send);
     printf("%s\n", msg_recv);
+    sprintf(registo, "REG %s %s %s %s", net, id, user_ip, user_tcp);
+    printf("%s\n", registo);
+    ok_reg = udp_communication(regIP, regUDP, registo);
+    printf("%s\n", ok_reg);
 }
 
 // int leave()
@@ -83,16 +87,17 @@ void join(char *net, char *id, char *regIP, char *regUDP)
 //     // 2 - terminar as sessões TCP com todos os seus vizinhos (há lista de vizinhos)?
 // }
 
-void commands(char *input, char *reg_ip, char *reg_udp)
+void commands(char *input, char *reg_ip, char *reg_udp, char *user_ip, char *user_tcp)
 {
-    char *action, *net, *id;
+    char *action, *net, id[128];
+    memset(id, 0, sizeof(id));
     action = strtok(input, " ");
 
     if (strcmp(action, "join") == 0)
     {
         net = strtok(NULL, " ");
-        id = strtok(NULL, " ");
-        join(net, id, reg_ip, reg_udp);
+        strcpy(id, strtok(NULL, " \n"));
+        join(net, id, reg_ip, reg_udp, user_ip, user_tcp);
     }
 
     // if (strcmp(action, "join") == 0)
@@ -252,7 +257,7 @@ int main(int argc, char *argv[])
                 }
                 else
                 {
-                    commands(buffer, reg_ip, reg_udp);
+                    commands(buffer, reg_ip, reg_udp, Ip, TCP_port);
                     // action = strtok(buffer, " ");
 
                     // if (strcmp(action, "join") == 0)
