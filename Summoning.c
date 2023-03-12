@@ -68,7 +68,57 @@ char *udp_communication(char *IP_server, char *port, char *msg)
     return msg_rcv;
 }
 
-int cmpr_id(char *node_list[], char *id)
+// char *tcp_communication(char *IP_server, char *port, char *msg)
+// {
+//     struct addrinfo hints, *res;
+//     int fd, n;
+//     ssize_t nbytes, nleft, nwritten, nread;
+//     char *ptr, buffer[128];
+
+//     fd = socket(AF_INET, SOCK_STREAM, 0); // TCP socket
+//     if (fd == -1)
+//         exit(1); // error
+//     memset(&hints, 0, sizeof hints);
+//     hints.ai_family = AF_INET;       // IPv4
+//     hints.ai_socktype = SOCK_STREAM; // TCP socket
+//     n = getaddrinfo("tejo.tecnico.ulisboa.pt", "58001", &hints, &res);
+//     if (n != 0) /*error*/
+//         exit(1);
+//     n = connect(fd, res->ai_addr, res->ai_addrlen);
+//     if (n == -1) /*error*/
+//         exit(1);
+
+//     ptr = sprintf(buffer, "Hello!\n", ...); // Trocar para a mensagem que quero transmitir
+//     nbytes = 7;
+//     nleft = nbytes;
+//     while (nleft > 0)
+//     {
+//         nwritten = write(fd, ptr, nleft);
+//         if (nwritten <= 0) /*error*/
+//             exit(1);
+//         nleft -= nwritten;
+//         ptr += nwritten;
+//     }
+//     nleft = nbytes;
+//     ptr = buffer;
+//     while (nleft > 0)
+//     {
+//         nread = read(fd, ptr, nleft);
+//         if (nread == -1) /*error*/
+//             exit(1);
+//         else if (nread == 0)
+//             break; // closed by peer
+//         nleft -= nread;
+//         ptr += nread;
+//     }
+//     nread = nbytes - nleft;
+//     buffer[nread] = '\0';
+//     printf("echo: %s\n", buffer);
+//     close(fd);
+//     // Dar return da mensagem
+// }
+
+int cmpr_id(char *node_list[], char *id, int size)
 {
     int i, confirm = 0, j = 0;
     char *used_id;
@@ -78,19 +128,17 @@ int cmpr_id(char *node_list[], char *id)
     {
         id_list[i] = 0;
     }
-
-    used_id = strtok(node_list[j], " ");
-    j++;
-    while (used_id != NULL)
+    while (j <= size && node_list[j] != NULL)
     {
-        printf("%s", used_id);
-        if (strcmp(used_id, id) == 0)
+        if (node_list[j] != NULL)
         {
-            printf("Confirm\n");
-            confirm = 1;
+            if (strncmp(node_list[j], id, 2) == 0)
+            {
+                confirm = 1;
+            }
         }
-        used_id = strtok(node_list[j], " ");
-        id_list[atoi(used_id)] = 1;
+
+        id_list[atoi(node_list[j])] = 1;
         j++;
     }
     if (confirm == 1)
@@ -120,14 +168,33 @@ int cmpr_id(char *node_list[], char *id)
 
 void join(char *net, char *id, char *regIP, char *regUDP, char *user_ip, char *user_tcp)
 {
-    char msg_send[128], *msg_recv, registo[128], *ok_reg, *node_list[MAX_CONNECTIONS];
-    char *line;
-    int i = 0, index;
-    sprintf(msg_send, "NODES %s", net);
-    msg_recv = udp_communication(regIP, regUDP, msg_send);
-    printf("%s\n", msg_recv);
+    char msg_send[128], *msg_recv, registo[128], *ok_reg, *node_list[MAX_CONNECTIONS], *new_connect;
+    char *line, rdm_node[128];
+    struct Msg
+    {
+        char msg_send[128];
+        char *msg_recv
+    };
 
-    line = strtok(msg_recv, "\n");
+    struct Nodeinfo
+    {
+        char *n_id;
+        char *n_ip;
+        char *n_port;
+    };
+    struct Msg nodes;
+    struct Msg new_tcp;
+    struct Nodeinfo nodeinfo;
+
+    int i = 0, index, size = (sizeof(node_list) / sizeof(node_list[0]));
+    sprintf(nodes.msg_send, "NODES %s", net);
+    nodes.msg_recv = udp_communication(regIP, regUDP, msg_send);
+    printf("%s\n", nodes.msg_recv);
+
+    memset(node_list, '\0', sizeof(node_list));
+
+    i = 0;
+    line = strtok(nodes.msg_recv, "\n");
     line = strtok(NULL, "\n");
     if (line != NULL)
     {
@@ -138,7 +205,7 @@ void join(char *net, char *id, char *regIP, char *regUDP, char *user_ip, char *u
             i++;
         }
 
-        if (cmpr_id(node_list, id) == 1)
+        if (cmpr_id(node_list, id, size) == 1)
         {
             printf("There is already your id, your new id is: %s\n", id);
         }
@@ -146,11 +213,18 @@ void join(char *net, char *id, char *regIP, char *regUDP, char *user_ip, char *u
         {
             printf("Ready to connect\n");
         }
-        index = rand() % (i + 1);
-    }
 
-    // AGORA É ESCOLHER UM AO ACASO
-    // GARANTIR QUE NINGUEM TEM O MESMO IP QUE NOS, SE SIM ESCOLHER OUTRO DIFERENTE
+        index = rand() % (i + 1);
+        strcpy(rdm_node, node_list[index]);
+        printf("%s\n", rdm_node);
+
+        nodeinfo.n_id = strtok(rdm_node, " ");
+        nodeinfo.n_ip = strtok(NULL, " ");
+        nodeinfo.n_port = strtok(NULL, "\n");
+
+        sprintf(new_tcp.msg_send, "NEW %s %s %s", nodeinfo.n_id, nodeinfo.n_ip, nodeinfo.n_port);
+        new_connect = tcp_communication()
+    }
     // FAZER A LIGACAO ENTRE OS NOS
     // INCLUI RECEBER O EXTERNO E METER COMO NOSSO BACKUP
 
@@ -159,6 +233,8 @@ void join(char *net, char *id, char *regIP, char *regUDP, char *user_ip, char *u
     // ok_reg = udp_communication(regIP, regUDP, registo);
     // printf("%s\n", ok_reg);
 }
+
+void djoin(char *net, char *id, char *regIP, char *regUDP, char *user_ip, char *user_tcp) {}
 
 // int leave()
 // {
@@ -181,33 +257,9 @@ void commands(char *input, char *reg_ip, char *reg_udp, char *user_ip, char *use
         strcpy(id, strtok(NULL, " \n"));
         join(net, id, reg_ip, reg_udp, user_ip, user_tcp);
     }
-
-    // if (strcmp(action, "join") == 0)
-    // {
-    //     action = strtok(NULL, " ");
-
-    //     if (strcmp(action, "net") == 0)
-    //     {
-    //         action = strtok(NULL, " ");
-    //         if (strcmp(action, "id") == 0)
-    //         {
-    //             join(net, id, reg_ip, reg_udp); // Falta ainda perceber onde raio vai perguntar sobre os nos que estao la
-    //         }
-    //         // else if (strcmp(action, "djoin") == 0)
-    //         // {
-    //         //     scanf("%s %d %d %s %d", net, &id, &bootid, bootIP, &bootTCP);
-    //         //     djoin(net, id, 0, 0);
-    //         // }
-    //         // else if (strcmp(action, "create") == 0)
-    //         // {
-    //         //     scanf("%s", name);
-    //         // }
-    //         // else
-    //         // {
-    //         //     printf("Invalid input\n");
-    //         // }
-    //     }
-    // }
+    else if (strcmp(action, "djoin") == 0)
+    {
+    }
 }
 
 int tcp_listener(char *port)
