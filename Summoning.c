@@ -68,31 +68,30 @@ char *udp_communication(char *IP_server, char *port, char *msg)
     return msg_rcv;
 }
 
-int cmpr_id(char node_list[], char *id)
+int cmpr_id(char *node_list[], char *id)
 {
-    int i, confirm = 0;
+    int i, confirm = 0, j = 0;
     char *used_id;
     int id_list[100];
 
-    used_id = strtok(node_list, " ");
-    printf("%s\n", used_id);
-    printf("%s\n", id);
-
-    for (int i = 0; i <= 100; i++)
+    for (i = 0; i <= 100; i++)
     {
         id_list[i] = 0;
     }
 
+    used_id = strtok(node_list[j], " ");
+    j++;
     while (used_id != NULL)
     {
+        printf("%s", used_id);
         if (strcmp(used_id, id) == 0)
         {
             printf("Confirm\n");
             confirm = 1;
         }
+        used_id = strtok(node_list[j], " ");
         id_list[atoi(used_id)] = 1;
-        used_id = strtok(NULL, "\n");
-        used_id = strtok(NULL, " ");
+        j++;
     }
     if (confirm == 1)
     {
@@ -139,22 +138,22 @@ void join(char *net, char *id, char *regIP, char *regUDP, char *user_ip, char *u
             i++;
         }
 
-        if (cmpr_id(*node_list, id) == 1)
+        if (cmpr_id(node_list, id) == 1)
         {
             printf("There is already your id, your new id is: %s\n", id);
         }
         else
         {
-            printf("Ready to connect");
+            printf("Ready to connect\n");
         }
         index = rand() % (i + 1);
     }
+
     // AGORA É ESCOLHER UM AO ACASO
     // GARANTIR QUE NINGUEM TEM O MESMO IP QUE NOS, SE SIM ESCOLHER OUTRO DIFERENTE
     // FAZER A LIGACAO ENTRE OS NOS
     // INCLUI RECEBER O EXTERNO E METER COMO NOSSO BACKUP
 
-    // Para garantir que a lista está com o número dos nos
     // sprintf(registo, "REG %s %s %s %s", net, id, user_ip, user_tcp);
     // printf("%s\n", registo);
     // ok_reg = udp_communication(regIP, regUDP, registo);
