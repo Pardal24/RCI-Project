@@ -11,8 +11,10 @@
 #include <sys/time.h>
 #include <errno.h>
 #include <netdb.h>
+#include <time.h>
 
 #define MAX_BUFFER_SIZE 1024
+#define MAX_CONNECTIONS 100
 
 char *My_IP()
 {
@@ -52,12 +54,12 @@ char *udp_communication(char *IP_server, char *port, char *msg)
 
     struct sockaddr addr;
     socklen_t addrlen;
-    char buffer[128];
+    char buffer[2016];
     char host[NI_MAXHOST], service[NI_MAXSERV]; // consts in <netdb.h>
     /*...*/                                     // see previous task code
     addrlen = sizeof(addr);
 
-    n = recvfrom(fd, buffer, 128, 0, &addr, &addrlen);
+    n = recvfrom(fd, buffer, 2016, 0, &addr, &addrlen);
     if (n == -1) /*error*/
         exit(1);
     buffer[n] = '\0';
@@ -66,16 +68,78 @@ char *udp_communication(char *IP_server, char *port, char *msg)
     return msg_rcv;
 }
 
+int cmpr_id(char node_list[], char *id)
+{
+    int i, confirm = 0;
+    char *used_id;
+    int id_list[100];
+
+    used_id = strtok(node_list, " ");
+    printf("%s", used_id);
+
+    for (int i = 0; i <= 100; i++)
+    {
+        id_list[i] = 0;
+    }
+
+    while (used_id != NULL)
+    {
+        if (strcmp(used_id, id))
+        {
+            confirm = 1;
+        }
+        id_list[atoi(used_id)] = 1;
+        used_id = strtok(NULL, "\n");
+        used_id = strtok(NULL, " ");
+    }
+    if (confirm == 1)
+    {
+        return 1;
+    } // Item found
+    else
+    {
+        return 0;
+    }
+}
+
 void join(char *net, char *id, char *regIP, char *regUDP, char *user_ip, char *user_tcp)
 {
-    char msg_send[128], *msg_recv, *registo, *ok_reg;
+    char msg_send[128], *msg_recv, registo[128], *ok_reg, *node_list[MAX_CONNECTIONS];
+    char *line;
+    int i = 0, index;
     sprintf(msg_send, "NODES %s", net);
     msg_recv = udp_communication(regIP, regUDP, msg_send);
     printf("%s\n", msg_recv);
-    sprintf(registo, "REG %s %s %s %s", net, id, user_ip, user_tcp);
-    printf("%s\n", registo);
-    ok_reg = udp_communication(regIP, regUDP, registo);
-    printf("%s\n", ok_reg);
+
+    line = strtok(msg_recv, "\n");
+    line = strtok(NULL, "\n");
+    while (line != NULL && i < MAX_CONNECTIONS)
+    {
+        node_list[i] = line;
+        line = strtok(NULL, "\n");
+        i++;
+    }
+
+    if (cmpr_id(*node_list, id) == 1)
+    {
+        printf("There is already your id, your new id is now");
+    }
+    else
+    {
+        printf("Ready to connect");
+    }
+
+    index = rand() % (i + 1);
+    // AGORA É ESCOLHER UM AO ACASO
+    // GARANTIR QUE NINGUEM TEM O MESMO IP QUE NOS, SE SIM ESCOLHER OUTRO DIFERENTE
+    // FAZER A LIGACAO ENTRE OS NOS
+    // INCLUI RECEBER O EXTERNO E METER COMO NOSSO BACKUP
+
+    // Para garantir que a lista está com o número dos nos
+    // sprintf(registo, "REG %s %s %s %s", net, id, user_ip, user_tcp);
+    // printf("%s\n", registo);
+    // ok_reg = udp_communication(regIP, regUDP, registo);
+    // printf("%s\n", ok_reg);
 }
 
 // int leave()
@@ -170,6 +234,9 @@ int main(int argc, char *argv[])
     struct sockaddr_in addr;
     fd_set rfds;
     socklen_t addrlen;
+    time_t t;
+
+    srand((unsigned)time(&t));
 
     if (argc != 5)
     {
