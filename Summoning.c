@@ -75,7 +75,8 @@ int cmpr_id(char node_list[], char *id)
     int id_list[100];
 
     used_id = strtok(node_list, " ");
-    printf("%s", used_id);
+    printf("%s\n", used_id);
+    printf("%s\n", id);
 
     for (int i = 0; i <= 100; i++)
     {
@@ -84,8 +85,9 @@ int cmpr_id(char node_list[], char *id)
 
     while (used_id != NULL)
     {
-        if (strcmp(used_id, id))
+        if (strcmp(used_id, id) == 0)
         {
+            printf("Confirm\n");
             confirm = 1;
         }
         id_list[atoi(used_id)] = 1;
@@ -94,7 +96,22 @@ int cmpr_id(char node_list[], char *id)
     }
     if (confirm == 1)
     {
-        return 1;
+        for (i = 0; i < 100; i++)
+        {
+            if (id_list[i] == 0)
+            {
+                if (i < 10)
+                {
+                    sprintf(id, "0%d", i);
+                    printf("new id %s\n", id);
+                }
+                else
+                {
+                    sprintf(id, "%d", i);
+                }
+                return 1;
+            }
+        }
     } // Item found
     else
     {
@@ -113,23 +130,25 @@ void join(char *net, char *id, char *regIP, char *regUDP, char *user_ip, char *u
 
     line = strtok(msg_recv, "\n");
     line = strtok(NULL, "\n");
-    while (line != NULL && i < MAX_CONNECTIONS)
+    if (line != NULL)
     {
-        node_list[i] = line;
-        line = strtok(NULL, "\n");
-        i++;
-    }
+        while (line != NULL && i < MAX_CONNECTIONS)
+        {
+            node_list[i] = line;
+            line = strtok(NULL, "\n");
+            i++;
+        }
 
-    if (cmpr_id(*node_list, id) == 1)
-    {
-        printf("There is already your id, your new id is now");
+        if (cmpr_id(*node_list, id) == 1)
+        {
+            printf("There is already your id, your new id is: %s\n", id);
+        }
+        else
+        {
+            printf("Ready to connect");
+        }
+        index = rand() % (i + 1);
     }
-    else
-    {
-        printf("Ready to connect");
-    }
-
-    index = rand() % (i + 1);
     // AGORA É ESCOLHER UM AO ACASO
     // GARANTIR QUE NINGUEM TEM O MESMO IP QUE NOS, SE SIM ESCOLHER OUTRO DIFERENTE
     // FAZER A LIGACAO ENTRE OS NOS
