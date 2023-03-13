@@ -16,6 +16,27 @@
 #define MAX_BUFFER_SIZE 1024
 #define MAX_CONNECTIONS 100
 
+struct neighbour
+{
+    char *intern[99];
+    char *external;
+    char *backup
+};
+
+struct My_info
+{
+    char *n_id;
+    char *n_ip;
+    char *n_port;
+};
+
+struct Nodeinfo
+{
+    char *n_id;
+    char *n_ip;
+    char *n_port;
+};
+
 char *My_IP()
 {
     int n;
@@ -68,60 +89,55 @@ char *udp_communication(char *IP_server, char *port, char *msg)
     return msg_rcv;
 }
 
-// char *tcp_communication(char *IP_server, char *port, char *msg)
-// {
-//     struct addrinfo hints, *res;
-//     int fd, n;
-//     ssize_t nbytes, nleft, nwritten, nread;
-//     char *ptr, buffer[128];
+void tcp_communication(struct Nodeinfo *ninfo, char *msg)
+{
+    struct addrinfo hints, *res;
+    int fd, n;
+    ssize_t nbytes, nleft, nwritten, nread;
 
-//     fd = socket(AF_INET, SOCK_STREAM, 0); // TCP socket
-//     if (fd == -1)
-//         exit(1); // error
-//     memset(&hints, 0, sizeof hints);
-//     hints.ai_family = AF_INET;       // IPv4
-//     hints.ai_socktype = SOCK_STREAM; // TCP socket
-//     n = getaddrinfo("tejo.tecnico.ulisboa.pt", "58001", &hints, &res);
-//     if (n != 0) /*error*/
-//         exit(1);
-//     n = connect(fd, res->ai_addr, res->ai_addrlen);
-//     if (n == -1) /*error*/
-//         exit(1);
+    fd = socket(AF_INET, SOCK_STREAM, 0); // TCP socket
+    if (fd == -1)
+        exit(1); // error
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_INET;       // IPv4
+    hints.ai_socktype = SOCK_STREAM; // TCP socket
+    n = getaddrinfo(ninfo->n_id, ninfo->n_port, &hints, &res);
+    if (n != 0) /*error*/
+        exit(1);
+    n = connect(fd, res->ai_addr, res->ai_addrlen);
+    if (n == -1) /*error*/
+        exit(1);
 
-//     ptr = sprintf(buffer, "Hello!\n", ...); // Trocar para a mensagem que quero transmitir
-//     nbytes = 7;
-//     nleft = nbytes;
-//     while (nleft > 0)
-//     {
-//         nwritten = write(fd, ptr, nleft);
-//         if (nwritten <= 0) /*error*/
-//             exit(1);
-//         nleft -= nwritten;
-//         ptr += nwritten;
-//     }
-//     nleft = nbytes;
-//     ptr = buffer;
-//     while (nleft > 0)
-//     {
-//         nread = read(fd, ptr, nleft);
-//         if (nread == -1) /*error*/
-//             exit(1);
-//         else if (nread == 0)
-//             break; // closed by peer
-//         nleft -= nread;
-//         ptr += nread;
-//     }
-//     nread = nbytes - nleft;
-//     buffer[nread] = '\0';
-//     printf("echo: %s\n", buffer);
-//     close(fd);
-//     // Dar return da mensagem
-// }
+    if (write(fd, msg, strlen(msg)) == -1)
+    {
+        printf("error: %s\n", strerror(errno));
+        exit(1);
+    }
+
+    close(fd);
+    // Dar return da mensagem
+}
+
+int read_msg(int *fd, char *msg_recv) // Vai ler a mensagem recebida pelo nó
+{
+    char *type;
+    struct Nodeinfo outsider;
+    // vizinhos
+    // eu
+    // outro
+    type = strtok(msg_recv, " ");
+
+    if (strcmp(type, "NEW") == 0)
+    {
+        outsider.n_id =
+    }
+    // Dividir a mensagem recebida com strtok
+    //  Se for NEW enviar externo
+}
 
 int cmpr_id(char *node_list[], char *id, int size)
 {
     int i, confirm = 0, j = 0;
-    char *used_id;
     int id_list[100];
 
     for (i = 0; i <= 100; i++)
@@ -160,35 +176,27 @@ int cmpr_id(char *node_list[], char *id, int size)
             }
         }
     } // Item found
-    else
-    {
-        return 0;
-    }
+
+    return 0;
 }
 
 void join(char *net, char *id, char *regIP, char *regUDP, char *user_ip, char *user_tcp)
 {
-    char msg_send[128], *msg_recv, registo[128], *ok_reg, *node_list[MAX_CONNECTIONS], *new_connect;
-    char *line, rdm_node[128];
+    char registo[128], *ok_reg, *node_list[MAX_CONNECTIONS];
+    char *line, rdm_node[128], *ptr;
     struct Msg
     {
         char msg_send[128];
-        char *msg_recv
+        char *msg_recv;
     };
 
-    struct Nodeinfo
-    {
-        char *n_id;
-        char *n_ip;
-        char *n_port;
-    };
     struct Msg nodes;
     struct Msg new_tcp;
     struct Nodeinfo nodeinfo;
 
     int i = 0, index, size = (sizeof(node_list) / sizeof(node_list[0]));
     sprintf(nodes.msg_send, "NODES %s", net);
-    nodes.msg_recv = udp_communication(regIP, regUDP, msg_send);
+    nodes.msg_recv = udp_communication(regIP, regUDP, nodes.msg_send);
     printf("%s\n", nodes.msg_recv);
 
     memset(node_list, '\0', sizeof(node_list));
@@ -198,6 +206,7 @@ void join(char *net, char *id, char *regIP, char *regUDP, char *user_ip, char *u
     line = strtok(NULL, "\n");
     if (line != NULL)
     {
+        printf("entrei");
         while (line != NULL && i < MAX_CONNECTIONS)
         {
             node_list[i] = line;
@@ -223,18 +232,24 @@ void join(char *net, char *id, char *regIP, char *regUDP, char *user_ip, char *u
         nodeinfo.n_port = strtok(NULL, "\n");
 
         sprintf(new_tcp.msg_send, "NEW %s %s %s", nodeinfo.n_id, nodeinfo.n_ip, nodeinfo.n_port);
-        new_connect = tcp_communication()
+        // ptr = &new_tcp.msg_send[0]; // ptr tem de apontar para a mensagem
+        tcp_communication(&nodeinfo, new_tcp.msg_send);
     }
     // FAZER A LIGACAO ENTRE OS NOS
     // INCLUI RECEBER O EXTERNO E METER COMO NOSSO BACKUP
 
-    // sprintf(registo, "REG %s %s %s %s", net, id, user_ip, user_tcp);
-    // printf("%s\n", registo);
-    // ok_reg = udp_communication(regIP, regUDP, registo);
-    // printf("%s\n", ok_reg);
+    sprintf(registo, "REG %s %s %s %s", net, id, user_ip, user_tcp);
+    printf("%s\n", registo);
+    ok_reg = udp_communication(regIP, regUDP, registo);
+    printf("%s\n", ok_reg);
 }
 
-void djoin(char *net, char *id, char *regIP, char *regUDP, char *user_ip, char *user_tcp) {}
+// void djoin(char *net, char *id, char *bootid, char *bootip, char *boottcp, char *my_ip, char *my_tcp)
+// {
+//     char *msg_send, *msg_recv, *new_connect;
+//     sprintf(msg_send, "NEW %s %s %s", id, my_ip, my_tcp);
+//     new_connect = tcp_communication(bootip, boottcp, msg_send);
+// }
 
 // int leave()
 // {
@@ -251,6 +266,14 @@ void commands(char *input, char *reg_ip, char *reg_udp, char *user_ip, char *use
     memset(id, 0, sizeof(id));
     action = strtok(input, " ");
 
+    struct djoin_args
+    {
+        char *bootid;
+        char *bootip;
+        char *boottcp;
+    };
+    struct djoin_args djoin_arg;
+
     if (strcmp(action, "join") == 0)
     {
         net = strtok(NULL, " ");
@@ -259,7 +282,21 @@ void commands(char *input, char *reg_ip, char *reg_udp, char *user_ip, char *use
     }
     else if (strcmp(action, "djoin") == 0)
     {
+        // net = strtok(NULL, " ");
+        // strcpy(id, strtok(NULL, " "));
+        // djoin_arg.bootid = strtok(NULL, " ");
+        // djoin_arg.bootip = strktok(NULL, " ");
+        // djoin_arg.boottcp = strtok(NULL, " \n");
+        // djoin(net, id, djoin_arg.bootip, djoin_arg.bootid, djoin_arg.boottcp);
     }
+    // else if (strcmp(action, "leave" && net != NULL) == 0)
+    // {
+
+    //     printf("UNREG %s %s\n", net, id);
+    //     // leaveNetwork(); //UNREG NET ID
+    //     net = NULL;
+    //     id = NULL;
+    // }
 }
 
 int tcp_listener(char *port)
@@ -377,50 +414,24 @@ int main(int argc, char *argv[])
 
                 printf("New connection on socket %d\n", newfd);
 
-                client_fds = (int *)realloc(client_fds, (client_count + 1) * sizeof(int));
                 client_fds[client_count++] = newfd;
-                // falta comparar com o maxfd
+                if (maxfd < newfd)
+                {
+                    maxfd = newfd;
+                }
                 counter--;
             }
             else if (FD_ISSET(STDIN_FILENO, &rfds))
             {
                 FD_CLR(STDIN_FILENO, &rfds);
-                if ((n = read(STDIN_FILENO, buffer, 128)) == 0)
+                if ((n = read(STDIN_FILENO, buffer, 128)) <= 0)
                 {
-                    if (n == -1)
-                    { /*error*/
-                        exit(1);
-                    }
+                    exit(1);
                 }
                 else
                 {
                     commands(buffer, reg_ip, reg_udp, Ip, TCP_port);
-                    // action = strtok(buffer, " ");
 
-                    // if (strcmp(action, "join") == 0)
-                    // {
-                    //     action = strtok(NULL, " ");
-
-                    //     if (strcmp(action, "net") == 0)
-                    //     {
-                    //         action = strtok(NULL, " ");
-                    //         if (strcmp(action, "id") == 0)
-                    //         {
-                    //             join(net, id, reg_ip, reg_udp); // Falta ainda perceber onde raio vai perguntar sobre os nos que estao la
-                    //         }
-                    //         // else if (strcmp(action, "djoin") == 0)
-                    //         // {
-                    //         //     scanf("%s %d %d %s %d", net, &id, &bootid, bootIP, &bootTCP);
-                    //         //     djoin(net, id, 0, 0);
-                    //         // }
-                    //         // else if (strcmp(action, "create") == 0)
-                    //         // {
-                    //         //     scanf("%s", name);
-                    //         // }
-                    //         // else
-                    //         // {
-                    //         //     printf("Invalid input\n");
-                    //         // }
                     close(STDIN_FILENO);
                     counter--;
                 }
@@ -434,7 +445,7 @@ int main(int argc, char *argv[])
                         if (FD_ISSET(client_fds[i], &rfds))
                         {
                             n = read(client_fds[i], buffer, MAX_BUFFER_SIZE);
-                            if (n == -1)
+                            if (n <= -1)
                             {
                                 perror("read");
                                 exit(EXIT_FAILURE);
@@ -449,6 +460,8 @@ int main(int argc, char *argv[])
                             {
                                 buffer[n] = '\0';
                                 printf("Received message from client on socket %d: %s\n", client_fds[i], buffer);
+                                n = read_msg(&(client_fds[i]), buffer);
+                                // dividir a mensagem recebida se for NEW ... -> meter dentro de uma funcao
                             }
                             counter--;
                         }
