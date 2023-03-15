@@ -18,7 +18,7 @@
 
 typedef struct other_node
 {
-    char id[5];
+    int id;
     char ip[128];
     char port[10];
     int fd;
@@ -27,16 +27,17 @@ typedef struct other_node
 typedef struct APP
 {
     My_info myinfo;
-    other_node internos[99];
+    other_node internos[100];
     other_node externo;
     other_node backup;
+    int net;
 } APP;
 
 typedef struct My_info
 {
-    char id[128];
-    char *ip;
-    char *port;
+    int id;
+    char ip[128];
+    char port[8];
 
 } My_info;
 
@@ -143,21 +144,24 @@ int read_msg(int *fd, APP *my_node, char *msg_recv) // Vai ler a mensagem recebi
 
 int cmpr_id(char *node_list[], APP *my_node, int size)
 {
-    int i, confirm = 0, j = 0;
+    int i, confirm = 0, j = 0, id;
     int id_list[100];
 
-    for (i = 0; i <= 100; i++)
-    {
-        id_list[i] = 0;
-    }
+    memset(id_list, 0, sizeof(id_list));
+
     while (j <= size && node_list[j] != NULL)
     {
         if (node_list[j] != NULL)
         {
-            if (strncmp(node_list[j], my_node->myinfo.id, 2) == 0)
+            sscanf(node_list[j], "%d ", id);
+            if (id == my_node->myinfo.id)
             {
                 confirm = 1;
             }
+            // if (strncmp(node_list[j], my_node->myinfo.id, 2) == 0)
+            // {
+            //     confirm = 1;
+            // }
         }
 
         id_list[atoi(node_list[j])] = 1;
@@ -186,29 +190,29 @@ int cmpr_id(char *node_list[], APP *my_node, int size)
     return 0;
 }
 
-int join(char *net, char *id, char *regIP, char *regUDP, APP *my_node)
+int join(int net, int id, char *regIP, char *regUDP, APP *my_node)
 {
     char registo[128], *ok_reg, *node_list[MAX_CONNECTIONS];
     char *line, rdm_node[128], *ptr, *n_id, *n_ip, *n_port;
     int new_fd;
+
     struct Msg
     {
-        char msg_send[128];
-        char *msg_recv;
+        char send[128];
+        char recv[3000]; // tamanho maximo que o nodes list pode retornar
     };
 
-    struct Msg nodes;
+    struct Msg msg;
     struct Msg new_tcp;
     int i = 0, index, size = (sizeof(node_list) / sizeof(node_list[0]));
 
-    sprintf(nodes.msg_send, "NODES %s", net);
-    nodes.msg_recv = udp_communication(regIP, regUDP, nodes.msg_send);
-    printf("%s\n", nodes.msg_recv);
+    sprintf(msg.send, "NODES %03d", net);
+    strcpy(msg.recv, udp_communication(regIP, regUDP, msg.send)); // udp_communication2(regIP, regUDP, msg) msg.send e msg.recv
+    printf("%s\n", msg.recv);
 
     memset(node_list, '\0', sizeof(node_list));
 
-    i = 0;
-    line = strtok(nodes.msg_recv, "\n");
+    line = strtok(msg.recv, "\n");
     line = strtok(NULL, "\n");
     if (line != NULL)
     {
@@ -218,7 +222,6 @@ int join(char *net, char *id, char *regIP, char *regUDP, APP *my_node)
             line = strtok(NULL, "\n");
             i++;
         }
-
         if (cmpr_id(node_list, my_node->myinfo.id, size) == 1)
         {
             printf("There is already your id, your new id is: %s\n", my_node->myinfo.id);
@@ -236,16 +239,16 @@ int join(char *net, char *id, char *regIP, char *regUDP, APP *my_node)
         n_ip = strtok(NULL, " ");
         n_port = strtok(NULL, "\n");
 
-        sprintf(new_tcp.msg_send, "NEW %s %s %s", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
-        printf("%s\n", new_tcp.msg_send);
-        // ptr = &new_tcp.msg_send[0]; // ptr tem de apontar para a mensagem
-        new_fd = tcp_communication(n_ip, n_port, new_tcp.msg_send);
+        sprintf(new_tcp.send, "NEW %s %s %s", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
+        printf("%s\n", new_tcp.send);
+        // ptr = &new_tcp.send[0]; // ptr tem de apontar para a mensagem
+        new_fd = tcp_communication(n_ip, n_port, new_tcp.send);
         return new_fd;
     }
     // FAZER A LIGACAO ENTRE OS NOS
     // INCLUI RECEBER O EXTERNO E METER COMO NOSSO BACKUP
 
-    sprintf(registo, "REG %s %s %s %s", net, my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
+    sprintf(registo, "REG %03d %s %s %s", net, my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
     printf("%s\n", registo);
     ok_reg = udp_communication(regIP, regUDP, registo);
     printf("%s\n", ok_reg);
@@ -253,9 +256,9 @@ int join(char *net, char *id, char *regIP, char *regUDP, APP *my_node)
 
 // void djoin(char *net, char *id, char *bootid, char *bootip, char *boottcp, char *my_ip, char *my_tcp)
 // {
-//     char *msg_send, *msg_recv, *new_connect;
-//     sprintf(msg_send, "NEW %s %s %s", id, my_ip, my_tcp);
-//     new_connect = tcp_communication(bootip, boottcp, msg_send);
+//     char *send, *recv, *new_connect;
+//     sprintf(send, "NEW %s %s %s", id, my_ip, my_tcp);
+//     new_connect = tcp_communication(bootip, boottcp, send);
 // }
 
 // int leave()
@@ -269,13 +272,21 @@ int join(char *net, char *id, char *regIP, char *regUDP, APP *my_node)
 
 void commands(char *input, char *reg_ip, char *reg_udp, APP *my_node)
 {
-    char *action, *net, id[128];
-    memset(id, 0, sizeof(id));
-    action = strtok(input, " ");
+    char action[10]; // *net, id[128];
+    int net, id;
+    // memset(id, 0, sizeof(id));
+    memset(action, 0, strlen(action));
+
+    sscanf(input, "%s ", action);
+    // action = strtok(input, " ");
 
     if (strcmp(action, "join") == 0)
     {
-        net = strtok(NULL, " ");
+        sscanf(input, "join %d %d", &net, &id);
+        // net = strtok(NULL, " ");
+        my_node->myinfo.id = id;
+        my_node->net = net;
+
         strcpy(my_node->myinfo.id, strtok(NULL, " \n"));
         join(net, id, reg_ip, reg_udp, &my_node);
     }
@@ -332,41 +343,42 @@ int tcp_listener(char *port)
 
 int main(int argc, char *argv[])
 {
-    char *Ip, *type, *reg_ip, *action, *net, *bootIP, *name, *reg_udp, *TCP_port; // Passar mrds para estruturas
-    char buffer[MAX_BUFFER_SIZE];
+    char *type, *action, *bootIP, *name; // Passar mrds para estruturas
+
     int fd_listen, newfd, n;
-    int client_count = 0, maxfd = 0, counter, i, id, bootid, bootTCP;
+    int client_count = 0, maxfd = 0, counter, i, id;
     int *client_fds = NULL; // vetor de clientes
     struct sockaddr_in addr;
     fd_set rfds;
     socklen_t addrlen;
-    time_t t;
-    APP my_node;
 
+    time_t t;
     srand((unsigned)time(&t));
 
-    memset(my_node.internos, '\0', sizeof(my_node.internos));
+    char Ip[16];
+    char TCP_port[6];
+    char reg_ip[30];
+    char reg_udp[6];
+
+    APP my_node;
+    memset(&my_node, 0, sizeof(my_node.internos));
+
+    char buffer[MAX_BUFFER_SIZE];
+    memset(buffer, 0, sizeof(buffer));
 
     if (argc != 5)
     {
         printf("Number of arguments is wrong, you are wrong\n Call the program with: IP TCP regIP(193.136.138.142) regUDP(59000)\n");
         exit(0);
     }
-
     else
     {
-
-        my_node.myinfo.ip = argv[1]; // falta meter strcpy() em todos
-        my_node.myinfo.port = argv[2];
-        reg_ip = argv[3];
-        reg_udp = argv[4];
-
         if (strcmp(argv[1], My_IP()) != 0) // Caso o utilizador não saiba o seu id devolver o id dele
         {
             printf("Your IP is: %s\n", My_IP()); // ver qual o ip a usar
         }
 
-        if (strcmp(reg_ip, "193.136.138.142") != 0)
+        if (strcmp(argv[3], "193.136.138.142") != 0)
         {
             printf("Please incert in regIP: 193.136.138.142\n");
             exit(0);
@@ -381,7 +393,12 @@ int main(int argc, char *argv[])
         printf("Welcome to the server please select your next command from this list:\n -join net id\n -djoin net id bootid bootIP bootTCP\n"
                " -create name\n -delete name\n -get dest name\n -show topology (st)\n -show names (sn)\n -show routing (sr)\n -leave\n -exit\n");
     }
+    strcpy(reg_ip, argv[3]);
+    strcpy(reg_udp, argv[4]);
 
+    // setup da info do meu nó e abertura do TCP Server
+    strcpy(my_node.myinfo.ip, argv[1]);
+    strcpy(my_node.myinfo.port, argv[2]);
     fd_listen = tcp_listener(TCP_port);
 
     while (1)
@@ -408,7 +425,7 @@ int main(int argc, char *argv[])
         while (counter > 0)
         {
 
-            if (FD_ISSET(fd_listen, &rfds))
+            if (FD_ISSET(fd_listen, &rfds)) // Notificacao no meu server TCP
             {
                 FD_CLR(fd_listen, &rfds);
                 addrlen = sizeof(addr);
@@ -424,24 +441,23 @@ int main(int argc, char *argv[])
                 }
                 counter--;
             }
-            else if (FD_ISSET(STDIN_FILENO, &rfds))
+            else if (FD_ISSET(STDIN_FILENO, &rfds)) // Notificao no user input
             {
                 FD_CLR(STDIN_FILENO, &rfds);
-                if ((n = read(STDIN_FILENO, buffer, 128)) <= 0)
-                {
+                if ((n = read(STDIN_FILENO, buffer, 128)) < 0)
                     exit(1);
-                }
                 else
                 {
                     commands(buffer, reg_ip, reg_udp, &my_node);
-
                     counter--;
                 }
             }
             else
             {
+
                 for (; counter > 0; counter--)
                 {
+
                     for (i = 0; i < client_count; i++)
                     {
                         if (FD_ISSET(client_fds[i], &rfds))
