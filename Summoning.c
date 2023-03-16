@@ -24,6 +24,14 @@ typedef struct other_node
     int fd;
 } other_node;
 
+typedef struct My_info
+{
+    int id;
+    char ip[128];
+    char port[8];
+
+} My_info;
+
 typedef struct APP
 {
     My_info myinfo;
@@ -33,13 +41,7 @@ typedef struct APP
     int net;
 } APP;
 
-typedef struct My_info
-{
-    int id;
-    char ip[128];
-    char port[8];
 
-} My_info;
 
 char *My_IP()
 {
@@ -125,25 +127,16 @@ int tcp_communication(char *n_ip, char *n_port, char *msg) // Vou ter de dar ret
     return fd;
 }
 
-int read_msg(int *fd, APP *my_node, char *msg_recv) // Vai ler a mensagem recebida pelo nó
-{
-    char *type;
-    struct Nodeinfo outsider;
-    // vizinhos
-    // eu
-    // outro
-    type = strtok(msg_recv, " ");
-
-    if (strcmp(type, "NEW") == 0)
-    {
-    }
-    return 0;
-    // Dividir a mensagem recebida com strtok
-    //  Se for NEW enviar externo
-}
-
 int cmpr_id(char *node_list[], APP *my_node, int size)
 {
+
+
+
+
+
+
+
+
     int i, confirm = 0, j = 0, id;
     int id_list[100];
 
@@ -153,7 +146,7 @@ int cmpr_id(char *node_list[], APP *my_node, int size)
     {
         if (node_list[j] != NULL)
         {
-            sscanf(node_list[j], "%d ", id);
+            sscanf(node_list[j], "%d ", &id);
             if (id == my_node->myinfo.id)
             {
                 confirm = 1;
@@ -175,7 +168,7 @@ int cmpr_id(char *node_list[], APP *my_node, int size)
             {
                 if (i < 10)
                 {
-                    sprintf(my_node->myinfo.id, "0%d", i);
+                    sprintf(my_node->myinfo.id, "%d", i);
                     printf("new id %s\n", my_node->myinfo.id);
                 }
                 else
@@ -208,7 +201,11 @@ int join(int net, int id, char *regIP, char *regUDP, APP *my_node)
 
     sprintf(msg.send, "NODES %03d", net);
     strcpy(msg.recv, udp_communication(regIP, regUDP, msg.send)); // udp_communication2(regIP, regUDP, msg) msg.send e msg.recv
+    
     printf("%s\n", msg.recv);
+
+    if (idCheck(msg.recv, my_node)==1)
+        printf("There is already your id, your new id is: %02d\n", my_node->myinfo.id);
 
     memset(node_list, '\0', sizeof(node_list));
 
@@ -222,7 +219,7 @@ int join(int net, int id, char *regIP, char *regUDP, APP *my_node)
             line = strtok(NULL, "\n");
             i++;
         }
-        if (cmpr_id(node_list, my_node->myinfo.id, size) == 1)
+        if (cmpr_id(node_list, my_node, size) == 1)
         {
             printf("There is already your id, your new id is: %s\n", my_node->myinfo.id);
         }
@@ -341,6 +338,15 @@ int tcp_listener(char *port)
     return fd;
 }
 
+int readTCP(int fd, char *buffer)
+{
+    int n = read(fd, buffer, 128);
+    if (n == -1) /*error*/
+        exit(1);
+    if (n == 0)
+        return 0;
+}
+
 int main(int argc, char *argv[])
 {
     char *type, *action, *bootIP, *name; // Passar mrds para estruturas
@@ -361,7 +367,9 @@ int main(int argc, char *argv[])
     char reg_udp[6];
 
     APP my_node;
-    memset(&my_node, 0, sizeof(my_node.internos));
+    other_node tempNode;
+    memset(&my_node, 0, sizeof(my_node));
+    memset(&tempNode, 0, sizeof(tempNode));
 
     char buffer[MAX_BUFFER_SIZE];
     memset(buffer, 0, sizeof(buffer));
@@ -425,25 +433,54 @@ int main(int argc, char *argv[])
         while (counter > 0)
         {
 
-            if (FD_ISSET(fd_listen, &rfds)) // Notificacao no meu server TCP
+            if (FD_ISSET(fd_listen, &rfds)) // Notificacao no meu server TCP // o unico caso que isto acontece é a receber uma msg "NEW IP TCP"
             {
                 FD_CLR(fd_listen, &rfds);
                 addrlen = sizeof(addr);
                 if ((newfd = accept(fd_listen, (struct sockaddr *)&addr, &addrlen)) == -1) /*error*/
                     exit(EXIT_FAILURE);
 
-                printf("New connection on socket %d\n", newfd);
+                //printf("New connection on socket %d\n", newfd);
 
-                client_fds[client_count++] = newfd;
-                if (maxfd < newfd)
+                FD_SET(newfd, &rfds);
+                readTCP(newfd, buffer); //buffer vai conter a mensagem recebida do tipo "NEW IP TCP"
+                printf("Received from TCP Server: %s", buffer);
+
+                //guardo os dados do novo nó
+                memset(&tempNode, 0, sizeof(tempNode));
+                sscanf(buffer, "NEW %d %s %s", &tempNode.id, tempNode.ip, tempNode.port); // registro o novo nó nos meus dados
+                tempNode.fd = newfd;
+
+                if(my_node.externo.id == my_node.myinfo.id) // se o meu externo for eu próprio -> tou sozinho -> digo ao novo nó que sou o externo dele & ele é o meu externo
                 {
-                    maxfd = newfd;
+                    my_node.externo = tempNode;
+
+                    sprintf(buffer, "EXTERN %02d %s %s", my_node.myinfo.id, my_node.myinfo.ip, my_node.myinfo.port); //envio o meu externo para novo o nó colocar como o seu backup
+                    sendTCP(newfd, buffer); 
+                    printf("Sent TCP to node %02d: %s", tempNode.id ,buffer);
                 }
-                counter--;
+                else // se o meu externo não for eu próprio -> já tenho externo -> informo o novo nó o meu externo (o backup dele) e guardo-o como interno
+                {
+                    my_node.internos[tempNode.id] = tempNode;
+
+                    sprintf(buffer, "EXTERN %02d %s %s", my_node.externo.id, my_node.externo.ip, my_node.externo.port); //envio o meu externo para novo o nó colocar como o seu backup
+                    sendTCP(newfd, buffer); 
+                    printf("Sent TCP to node %02d: %s", tempNode.id, buffer);
+                }                
+
+                                 //nao sei o que fazer aqui vv
+                                client_fds[client_count++] = newfd;
+                                if (maxfd < newfd)
+                                {
+                                    maxfd = newfd;
+                                }
+                                counter--;
             }
             else if (FD_ISSET(STDIN_FILENO, &rfds)) // Notificao no user input
             {
                 FD_CLR(STDIN_FILENO, &rfds);
+                memset(buffer, 0, sizeof(buffer));
+
                 if ((n = read(STDIN_FILENO, buffer, 128)) < 0)
                     exit(1);
                 else
@@ -452,9 +489,8 @@ int main(int argc, char *argv[])
                     counter--;
                 }
             }
-            else
+            else //nao mexi aqui
             {
-
                 for (; counter > 0; counter--)
                 {
 
