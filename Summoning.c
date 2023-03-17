@@ -208,7 +208,7 @@ int cmpr_id(char *node_list[], APP *my_node, int size)
     return 0;
 }
 
-int join(int net, int id, char *regIP, char *regUDP, APP *my_node, other_node *tempNode)
+void join(int net, int id, char *regIP, char *regUDP, APP *my_node, other_node *tempNode)
 {
     char registo[128], *ok_reg, *node_list[MAX_CONNECTIONS];
     char *line, rdm_node[128], *ptr, *n_id, *n_ip, *n_port;
