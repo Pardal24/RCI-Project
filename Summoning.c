@@ -19,29 +19,19 @@
 typedef struct other_node
 {
     int id;
-    char ip[128];
+    char ip[30];
     char port[10];
     int fd;
 } other_node;
 
-typedef struct My_info
-{
-    int id;
-    char ip[128];
-    char port[8];
-
-} My_info;
-
 typedef struct APP
 {
-    My_info myinfo;
-    other_node internos[100];
+    other_node myinfo;
+    other_node internos[99];
     other_node externo;
     other_node backup;
     int net;
 } APP;
-
-
 
 char *My_IP()
 {
@@ -121,21 +111,64 @@ int tcp_communication(char *n_ip, char *n_port, char *msg) // Vou ter de dar ret
         exit(1);
     }
 
-    close(fd);
     printf("tou a sair do tcp_communication\n");
 
     return fd;
 }
 
+void read_msg(other_node *tempNode, APP *my_node, char *buffer) // Vai ler a mensagem recebida pelo nó
+{
+    other_node extern_Node;
+    memset(&extern_Node, 0, sizeof(extern_Node));
+
+    if (sscanf(buffer, "NEW %d %s %s", tempNode->id, tempNode->ip, tempNode->port) == 3)
+    {
+        memset(buffer, 0, strlen(buffer));
+        if (my_node->externo.id == my_node->myinfo.id) // se o meu externo for eu próprio -> tou sozinho -> digo ao novo nó que sou o externo dele & ele é o meu externo
+        {
+            my_node->externo = *tempNode;
+
+            sprintf(buffer, "EXTERN %02d %s %s", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
+
+            if (write(tempNode->fd, buffer, strlen(buffer)) == -1)
+            {
+                printf("error: %s\n", strerror(errno));
+                exit(1);
+            } // envio o meu externo para novo o nó colocar como o seu backup
+        }
+        else // se o meu externo não for eu próprio -> já tenho externo -> informo o novo nó o meu externo (o backup dele) e guardo-o como interno
+        {
+            my_node->internos[tempNode->id] = *tempNode;
+
+            sprintf(buffer, "EXTERN %02d %s %s", my_node->externo.id, my_node->externo.ip, my_node->externo.port); // envio o meu externo para novo o nó colocar como o seu backup
+            if (write(tempNode->fd, buffer, strlen(buffer)) == -1)
+            {
+                printf("error: %s\n", strerror(errno));
+                exit(1);
+            }
+        }
+
+    } // registro o novo nó nos meus dados
+
+    if (sscanf(buffer, "EXTERN %d %s %s", extern_Node.id, extern_Node.ip, extern_Node.port) == 3)
+    {
+        if (tempNode->id == extern_Node.id) // se o id do nó que me envia o externo for igual ao id me enviado entao o meu externo será o no que comunicou comigo
+        {
+            my_node->externo = *tempNode; // o meu externo é aquele que me enviou a mensagem
+            printf("My extern is: %02d %s %s\n", tempNode->id, tempNode->ip, tempNode->port);
+        }
+        else
+        {
+            my_node->externo = *tempNode;
+            my_node->backup = extern_Node;
+            printf("My extern is: %02d %s %s\n", tempNode->id, tempNode->ip, tempNode->port);
+            printf("My backup is: %02d %s %s\n", extern_Node.id, extern_Node.ip, extern_Node.port);
+        }
+    }
+}
+
 int cmpr_id(char *node_list[], APP *my_node, int size)
 {
-
-
-
-
-
-
-
 
     int i, confirm = 0, j = 0, id;
     int id_list[100];
@@ -166,15 +199,7 @@ int cmpr_id(char *node_list[], APP *my_node, int size)
         {
             if (id_list[i] == 0)
             {
-                if (i < 10)
-                {
-                    sprintf(my_node->myinfo.id, "%d", i);
-                    printf("new id %s\n", my_node->myinfo.id);
-                }
-                else
-                {
-                    sprintf(my_node->myinfo.id, "%d", i);
-                }
+                my_node->myinfo.id = i;
                 return 1;
             }
         }
@@ -183,7 +208,7 @@ int cmpr_id(char *node_list[], APP *my_node, int size)
     return 0;
 }
 
-int join(int net, int id, char *regIP, char *regUDP, APP *my_node)
+int join(int net, int id, char *regIP, char *regUDP, APP *my_node, other_node *tempNode)
 {
     char registo[128], *ok_reg, *node_list[MAX_CONNECTIONS];
     char *line, rdm_node[128], *ptr, *n_id, *n_ip, *n_port;
@@ -201,11 +226,8 @@ int join(int net, int id, char *regIP, char *regUDP, APP *my_node)
 
     sprintf(msg.send, "NODES %03d", net);
     strcpy(msg.recv, udp_communication(regIP, regUDP, msg.send)); // udp_communication2(regIP, regUDP, msg) msg.send e msg.recv
-    
-    printf("%s\n", msg.recv);
 
-    if (idCheck(msg.recv, my_node)==1)
-        printf("There is already your id, your new id is: %02d\n", my_node->myinfo.id);
+    printf("%s\n", msg.recv);
 
     memset(node_list, '\0', sizeof(node_list));
 
@@ -240,7 +262,11 @@ int join(int net, int id, char *regIP, char *regUDP, APP *my_node)
         printf("%s\n", new_tcp.send);
         // ptr = &new_tcp.send[0]; // ptr tem de apontar para a mensagem
         new_fd = tcp_communication(n_ip, n_port, new_tcp.send);
-        return new_fd;
+
+        tempNode->id = n_id;
+        strcpy(tempNode->ip, n_ip);
+        strcpy(tempNode->port, n_port);
+        tempNode->fd = new_fd;
     }
     // FAZER A LIGACAO ENTRE OS NOS
     // INCLUI RECEBER O EXTERNO E METER COMO NOSSO BACKUP
@@ -267,7 +293,7 @@ int join(int net, int id, char *regIP, char *regUDP, APP *my_node)
 //     // 2 - terminar as sessões TCP com todos os seus vizinhos (há lista de vizinhos)?
 // }
 
-void commands(char *input, char *reg_ip, char *reg_udp, APP *my_node)
+void commands(char *input, char *reg_ip, char *reg_udp, APP *my_node, other_node *tempNode)
 {
     char action[10]; // *net, id[128];
     int net, id;
@@ -285,7 +311,7 @@ void commands(char *input, char *reg_ip, char *reg_udp, APP *my_node)
         my_node->net = net;
 
         strcpy(my_node->myinfo.id, strtok(NULL, " \n"));
-        join(net, id, reg_ip, reg_udp, &my_node);
+        join(net, id, reg_ip, reg_udp, &my_node, &tempNode);
     }
     else if (strcmp(action, "djoin") == 0)
     {
@@ -338,22 +364,12 @@ int tcp_listener(char *port)
     return fd;
 }
 
-int readTCP(int fd, char *buffer)
-{
-    int n = read(fd, buffer, 128);
-    if (n == -1) /*error*/
-        exit(1);
-    if (n == 0)
-        return 0;
-}
-
 int main(int argc, char *argv[])
 {
-    char *type, *action, *bootIP, *name; // Passar mrds para estruturas
-
+    char *type, *action, *bootIP, *name;
+    char buffer[MAX_BUFFER_SIZE];
     int fd_listen, newfd, n;
     int client_count = 0, maxfd = 0, counter, i, id;
-    int *client_fds = NULL; // vetor de clientes
     struct sockaddr_in addr;
     fd_set rfds;
     socklen_t addrlen;
@@ -361,17 +377,15 @@ int main(int argc, char *argv[])
     time_t t;
     srand((unsigned)time(&t));
 
-    char Ip[16];
-    char TCP_port[6];
     char reg_ip[30];
     char reg_udp[6];
-
+    // nossas estruturas
     APP my_node;
     other_node tempNode;
-    memset(&my_node, 0, sizeof(my_node));
-    memset(&tempNode, 0, sizeof(tempNode));
+    other_node clients[100];
 
-    char buffer[MAX_BUFFER_SIZE];
+    memset(&my_node, 0, sizeof(my_node));
+    memset(clients, 0, sizeoff(clients));
     memset(buffer, 0, sizeof(buffer));
 
     if (argc != 5)
@@ -407,21 +421,28 @@ int main(int argc, char *argv[])
     // setup da info do meu nó e abertura do TCP Server
     strcpy(my_node.myinfo.ip, argv[1]);
     strcpy(my_node.myinfo.port, argv[2]);
-    fd_listen = tcp_listener(TCP_port);
+
+    fd_listen = tcp_listener(my_node.myinfo.port); // abertura de uma porta tcp para listen
+    my_node.myinfo.fd = fd_listen;
+
+    my_node.externo = my_node.myinfo;
+    my_node.backup = my_node.myinfo;
 
     while (1)
     {
         FD_ZERO(&rfds); // clear ao rfds
+
+        memset(&tempNode, 0, sizeof(tempNode));
 
         FD_SET(fd_listen, &rfds);    // vigia porta listen
         FD_SET(STDIN_FILENO, &rfds); // vigia terminal
 
         for (i = 0; i < client_count; i++) // vigia canais TCP atuais
         {
-            FD_SET(client_fds[i], &rfds);
-            if (client_fds[i] > maxfd)
+            FD_SET(clients[i].fd, &rfds);
+            if (clients[i].fd > maxfd)
             {
-                maxfd = client_fds[i];
+                maxfd = clients[i].fd;
             }
         }
 
@@ -440,41 +461,14 @@ int main(int argc, char *argv[])
                 if ((newfd = accept(fd_listen, (struct sockaddr *)&addr, &addrlen)) == -1) /*error*/
                     exit(EXIT_FAILURE);
 
-                //printf("New connection on socket %d\n", newfd);
+                printf("New connection on socket %d\n", newfd);
 
-                FD_SET(newfd, &rfds);
-                readTCP(newfd, buffer); //buffer vai conter a mensagem recebida do tipo "NEW IP TCP"
-                printf("Received from TCP Server: %s", buffer);
-
-                //guardo os dados do novo nó
-                memset(&tempNode, 0, sizeof(tempNode));
-                sscanf(buffer, "NEW %d %s %s", &tempNode.id, tempNode.ip, tempNode.port); // registro o novo nó nos meus dados
-                tempNode.fd = newfd;
-
-                if(my_node.externo.id == my_node.myinfo.id) // se o meu externo for eu próprio -> tou sozinho -> digo ao novo nó que sou o externo dele & ele é o meu externo
+                clients[client_count++].fd = newfd;
+                if (maxfd < newfd)
                 {
-                    my_node.externo = tempNode;
-
-                    sprintf(buffer, "EXTERN %02d %s %s", my_node.myinfo.id, my_node.myinfo.ip, my_node.myinfo.port); //envio o meu externo para novo o nó colocar como o seu backup
-                    sendTCP(newfd, buffer); 
-                    printf("Sent TCP to node %02d: %s", tempNode.id ,buffer);
+                    maxfd = newfd;
                 }
-                else // se o meu externo não for eu próprio -> já tenho externo -> informo o novo nó o meu externo (o backup dele) e guardo-o como interno
-                {
-                    my_node.internos[tempNode.id] = tempNode;
-
-                    sprintf(buffer, "EXTERN %02d %s %s", my_node.externo.id, my_node.externo.ip, my_node.externo.port); //envio o meu externo para novo o nó colocar como o seu backup
-                    sendTCP(newfd, buffer); 
-                    printf("Sent TCP to node %02d: %s", tempNode.id, buffer);
-                }                
-
-                                 //nao sei o que fazer aqui vv
-                                client_fds[client_count++] = newfd;
-                                if (maxfd < newfd)
-                                {
-                                    maxfd = newfd;
-                                }
-                                counter--;
+                counter--;
             }
             else if (FD_ISSET(STDIN_FILENO, &rfds)) // Notificao no user input
             {
@@ -485,20 +479,24 @@ int main(int argc, char *argv[])
                     exit(1);
                 else
                 {
-                    commands(buffer, reg_ip, reg_udp, &my_node);
+                    commands(buffer, reg_ip, reg_udp, &my_node, &tempNode);
+                    if (&tempNode != NULL)
+                    {
+                        clients[client_count++] = tempNode;
+                    }
                     counter--;
                 }
             }
-            else //nao mexi aqui
+            else // nao mexi aqui
             {
                 for (; counter > 0; counter--)
                 {
 
                     for (i = 0; i < client_count; i++)
                     {
-                        if (FD_ISSET(client_fds[i], &rfds))
+                        if (FD_ISSET(clients[i].fd, &rfds))
                         {
-                            n = read(client_fds[i], buffer, MAX_BUFFER_SIZE);
+                            n = read(clients[i].fd, buffer, MAX_BUFFER_SIZE);
                             if (n <= -1)
                             {
                                 perror("read");
@@ -506,16 +504,20 @@ int main(int argc, char *argv[])
                             }
                             if (n == 0)
                             {
-                                printf("Connection closed by client on socket %d\n", client_fds[i]);
-                                close(client_fds[i]);
-                                client_fds[i] = -1;
+                                printf("Connection closed by client on socket %d\n", clients[i].fd);
+                                memset(&my_node.internos[clients[i].id], 0, sizeof(my_node.internos[clients[i].id]));
+                                if (my_node.externo.id == clients[i].id)
+                                {
+                                    memset(&my_node.externo, 0, sizeof(my_node.externo));
+                                }
+                                close(clients[i].fd);
+                                clients[i] = -1;
                             }
                             else
                             {
                                 buffer[n] = '\0';
-                                printf("Received message from client on socket %d: %s\n", client_fds[i], buffer);
-                                n = read_msg(&(client_fds[i]), &my_node, buffer); // fd do no a enviar mensagem, mensagem a ler
-                                // dividir a mensagem recebida se for NEW ... -> meter dentro de uma funcao
+                                printf("Received message from client on socket %d: %s\n", clients[i].fd, buffer);
+                                read_msg(&(clients[i]), &my_node, buffer); // fd do no a enviar mensagem, mensagem a ler
                             }
                             counter--;
                         }
