@@ -192,7 +192,7 @@ int cmpr_id(char *node_list[], APP *my_node, int size)
             // }
         }
 
-        id_list[atoi(node_list[j])] = 1;
+        id_list[id] = 1;
         j++;
     }
     if (confirm == 1)
@@ -260,6 +260,7 @@ void join(char *regIP, char *regUDP, APP *my_node, other_node *tempNode)
         sprintf(new_tcp.send, "NEW %d %s %s", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
         printf("Mensagem enviada: %s\n", new_tcp.send);
         tempNode->fd = tcp_communication(tempNode->ip, tempNode->port, new_tcp.send);
+        printf("Fd a que me junto: %d\n", tempNode->fd);
     }
     // FAZER A LIGACAO ENTRE OS NOS
     // INCLUI RECEBER O EXTERNO E METER COMO NOSSO BACKUP
@@ -328,6 +329,7 @@ int tcp_listener(char *port)
 {
     int port_tcp = atoi(port);
     int fd = socket(AF_INET, SOCK_STREAM, 0);
+    struct sockaddr_in addr;
 
     if (fd == -1)
     {
@@ -335,7 +337,6 @@ int tcp_listener(char *port)
         exit(EXIT_FAILURE);
     }
 
-    struct sockaddr_in addr;
     memset(&addr, 0, sizeof(addr));
     addr.sin_family = AF_INET;
     addr.sin_addr.s_addr = htonl(INADDR_ANY);
@@ -360,7 +361,7 @@ int main(int argc, char *argv[])
 {
     char *type, *action, *bootIP, *name;
     char buffer[MAX_BUFFER_SIZE];
-    int fd_listen, newfd, n;
+    int newfd, n;
     int client_count = 0, maxfd = 0, counter, i, id;
     struct sockaddr_in addr;
     fd_set rfds;
@@ -414,8 +415,7 @@ int main(int argc, char *argv[])
     strcpy(my_node.myinfo.ip, argv[1]);
     strcpy(my_node.myinfo.port, argv[2]);
 
-    fd_listen = tcp_listener(my_node.myinfo.port); // abertura de uma porta tcp para listen
-    my_node.myinfo.fd = fd_listen;
+    my_node.myinfo.fd = tcp_listener(my_node.myinfo.port); // abertura de uma porta tcp para listen
 
     my_node.externo = my_node.myinfo;
     my_node.backup = my_node.myinfo;
@@ -426,8 +426,8 @@ int main(int argc, char *argv[])
 
         memset(&tempNode, 0, sizeof(tempNode));
 
-        FD_SET(fd_listen, &rfds);    // vigia porta listen
-        FD_SET(STDIN_FILENO, &rfds); // vigia terminal
+        FD_SET(my_node.myinfo.fd, &rfds); // vigia porta listen
+        FD_SET(STDIN_FILENO, &rfds);      // vigia terminal
 
         for (i = 0; i < client_count; i++) // vigia canais TCP atuais
         {
@@ -439,7 +439,7 @@ int main(int argc, char *argv[])
         }
         printf("Tou a espera\n");
         counter = select(maxfd + 1, &rfds, (fd_set *)NULL, (fd_set *)NULL, (struct timeval *)NULL);
-        printf("%d", counter);
+        printf("%d\n", counter);
 
         if (counter <= 0) /*error*/
             exit(1);
@@ -447,20 +447,22 @@ int main(int argc, char *argv[])
         while (counter > 0)
         {
 
-            if (FD_ISSET(fd_listen, &rfds)) // Notificacao no meu server TCP // o unico caso que isto acontece é a receber uma msg "NEW IP TCP"
+            if (FD_ISSET(my_node.myinfo.fd, &rfds)) // Notificacao no meu server TCP // o unico caso que isto acontece é a receber uma msg "NEW IP TCP"
             {
-                FD_CLR(fd_listen, &rfds);
+                FD_CLR(my_node.myinfo.fd, &rfds);
                 addrlen = sizeof(addr);
-                if ((newfd = accept(fd_listen, (struct sockaddr *)&addr, &addrlen)) == -1) /*error*/
+                if ((newfd = accept(my_node.myinfo.fd, (struct sockaddr *)&addr, &addrlen)) == -1) /*error*/
                     exit(EXIT_FAILURE);
 
                 printf("New connection on socket %d\n", newfd);
 
-                clients[client_count++].fd = newfd;
+                clients[client_count].fd = newfd;
                 if (maxfd < newfd)
                 {
                     maxfd = newfd;
                 }
+                printf("Client counte: %d\n", client_count);
+                client_count++;
                 counter--;
             }
             else if (FD_ISSET(STDIN_FILENO, &rfds)) // Notificao no user input
@@ -473,9 +475,11 @@ int main(int argc, char *argv[])
                 else
                 {
                     commands(buffer, reg_ip, reg_udp, &my_node, &tempNode);
-                    if (&tempNode != NULL)
+                    if (tempNode.fd != 0)
                     {
+                        printf("New client incoming from join\n");
                         clients[client_count++] = tempNode;
+                        printf("Client_count: %d\n", client_count);
                         for (int i = 0; i < client_count; i++)
                         {
                             if (clients[i].fd > maxfd)
@@ -516,6 +520,7 @@ int main(int argc, char *argv[])
                                 }
                                 close(clients[i].fd);
                                 memset(&clients[i], 0, sizeof(clients[i]));
+                                client_count--;
                                 maxfd = 0;
                                 for (int i = 0; i < client_count; i++)
                                 {
