@@ -90,7 +90,6 @@ int tcp_communication(char *n_ip, char *n_port, char *msg) // Vou ter de dar ret
 {
     struct addrinfo hints, *res;
     int fd, n;
-    ssize_t nbytes, nleft, nwritten, nread;
 
     fd = socket(AF_INET, SOCK_STREAM, 0); // TCP socket
     if (fd == -1)
@@ -98,6 +97,7 @@ int tcp_communication(char *n_ip, char *n_port, char *msg) // Vou ter de dar ret
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_INET;       // IPv4
     hints.ai_socktype = SOCK_STREAM; // TCP socket
+
     n = getaddrinfo(n_ip, n_port, &hints, &res);
     if (n != 0) /*error*/
         exit(1);
@@ -148,6 +148,7 @@ void read_msg(other_node *tempNode, APP *my_node, char *buffer) // Vai ler a men
                 exit(1);
             }
         }
+        memset(buffer, 0, strlen(buffer));
 
     } // registro o novo nó nos meus dados
 
@@ -158,6 +159,7 @@ void read_msg(other_node *tempNode, APP *my_node, char *buffer) // Vai ler a men
         {
             my_node->externo = *tempNode; // o meu externo é aquele que me enviou a mensagem
             printf("My extern is: %02d %s %s\n", tempNode->id, tempNode->ip, tempNode->port);
+            memset(buffer, 0, strlen(buffer));
         }
         else
         {
@@ -165,6 +167,7 @@ void read_msg(other_node *tempNode, APP *my_node, char *buffer) // Vai ler a men
             my_node->backup = extern_Node;
             printf("My extern is: %02d %s %s\n", tempNode->id, tempNode->ip, tempNode->port);
             printf("My backup is: %02d %s %s\n", extern_Node.id, extern_Node.ip, extern_Node.port);
+            memset(buffer, 0, strlen(buffer));
         }
     }
 }
@@ -245,6 +248,8 @@ void join(char *regIP, char *regUDP, APP *my_node, other_node *tempNode)
         if (cmpr_id(node_list, my_node, size) == 1)
         {
             printf("There is already your id, your new id is: %d\n", my_node->myinfo.id);
+            my_node->externo.id = my_node->myinfo.id;
+            my_node->backup.id = my_node->myinfo.id;
         }
         else
         {
@@ -258,12 +263,9 @@ void join(char *regIP, char *regUDP, APP *my_node, other_node *tempNode)
         sscanf(rdm_node, "%d %s %s", &tempNode->id, tempNode->ip, tempNode->port);
 
         sprintf(new_tcp.send, "NEW %d %s %s", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
-        printf("Mensagem enviada: %s\n", new_tcp.send);
+        printf("Mensagem enviada: %s -----> id %d\n", new_tcp.send, tempNode->id);
         tempNode->fd = tcp_communication(tempNode->ip, tempNode->port, new_tcp.send);
-        printf("Fd a que me junto: %d\n", tempNode->fd);
     }
-    // FAZER A LIGACAO ENTRE OS NOS
-    // INCLUI RECEBER O EXTERNO E METER COMO NOSSO BACKUP
 
     sprintf(registo, "REG %03d %d %s %s", my_node->net, my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
     printf("%s\n", registo);
@@ -302,6 +304,8 @@ void commands(char *input, char *reg_ip, char *reg_udp, APP *my_node, other_node
 
     if (sscanf(input, "join %d %d", &my_node->net, &my_node->myinfo.id))
     {
+        my_node->externo = my_node->myinfo;
+        my_node->backup = my_node->myinfo;
         join(reg_ip, reg_udp, my_node, tempNode);
     }
     else if (sscanf(input, "djoin %d %d %d %s %s", &my_node->net, &my_node->myinfo.id, &tempNode->id, tempNode->ip, tempNode->port))
@@ -416,9 +420,7 @@ int main(int argc, char *argv[])
     strcpy(my_node.myinfo.port, argv[2]);
 
     my_node.myinfo.fd = tcp_listener(my_node.myinfo.port); // abertura de uma porta tcp para listen
-
-    my_node.externo = my_node.myinfo;
-    my_node.backup = my_node.myinfo;
+    maxfd = my_node.myinfo.fd;
 
     while (1)
     {
@@ -437,9 +439,9 @@ int main(int argc, char *argv[])
                 maxfd = clients[i].fd;
             }
         }
+
         printf("Tou a espera\n");
         counter = select(maxfd + 1, &rfds, (fd_set *)NULL, (fd_set *)NULL, (struct timeval *)NULL);
-        printf("%d\n", counter);
 
         if (counter <= 0) /*error*/
             exit(1);
@@ -453,8 +455,6 @@ int main(int argc, char *argv[])
                 addrlen = sizeof(addr);
                 if ((newfd = accept(my_node.myinfo.fd, (struct sockaddr *)&addr, &addrlen)) == -1) /*error*/
                     exit(EXIT_FAILURE);
-
-                printf("New connection on socket %d\n", newfd);
 
                 clients[client_count].fd = newfd;
                 if (maxfd < newfd)
@@ -477,7 +477,6 @@ int main(int argc, char *argv[])
                     commands(buffer, reg_ip, reg_udp, &my_node, &tempNode);
                     if (tempNode.fd != 0)
                     {
-                        printf("New client incoming from join\n");
                         clients[client_count++] = tempNode;
                         printf("Client_count: %d\n", client_count);
                         for (int i = 0; i < client_count; i++)
@@ -532,9 +531,8 @@ int main(int argc, char *argv[])
                             }
                             else
                             {
-                                printf("entrei aqui");
+
                                 buffer[n] = '\0';
-                                printf("Received message from client on socket %d: %s\n", clients[i].fd, buffer);
                                 read_msg(&(clients[i]), &my_node, buffer); // fd do no a enviar mensagem, mensagem a ler
                             }
                             counter--;
