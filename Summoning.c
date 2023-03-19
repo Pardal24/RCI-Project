@@ -247,7 +247,7 @@ void join(char *regIP, char *regUDP, APP *my_node, other_node *tempNode)
         }
         if (cmpr_id(node_list, my_node, size) == 1)
         {
-            printf("There is already your id, your new id is: %d\n", my_node->myinfo.id);
+            printf("There is already your id, your new id is: %02d\n", my_node->myinfo.id);
             my_node->externo.id = my_node->myinfo.id;
             my_node->backup.id = my_node->myinfo.id;
         }
@@ -262,12 +262,12 @@ void join(char *regIP, char *regUDP, APP *my_node, other_node *tempNode)
 
         sscanf(rdm_node, "%d %s %s", &tempNode->id, tempNode->ip, tempNode->port);
 
-        sprintf(new_tcp.send, "NEW %d %s %s", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
-        printf("Mensagem enviada: %s -----> id %d\n", new_tcp.send, tempNode->id);
+        sprintf(new_tcp.send, "NEW %02d %s %s", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
+        printf("Mensagem enviada: %s -----> id %02d\n", new_tcp.send, tempNode->id);
         tempNode->fd = tcp_communication(tempNode->ip, tempNode->port, new_tcp.send);
     }
 
-    sprintf(registo, "REG %03d %d %s %s", my_node->net, my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
+    sprintf(registo, "REG %03d %02d %s %s", my_node->net, my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
     printf("%s\n", registo);
     ok_reg = udp_communication(regIP, regUDP, registo);
     printf("%s\n", ok_reg);
@@ -279,7 +279,7 @@ void djoin(APP *my_node, other_node *tempNode)
 
     memset(msg_send, 0, sizeof(msg_send));
 
-    sprintf(msg_send, "NEW %d %s %s", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
+    sprintf(msg_send, "NEW %02d %s %s", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
     printf("Mensagem enviada: %s\n", msg_send);
     tempNode->fd = tcp_communication(tempNode->ip, tempNode->port, msg_send);
 }
@@ -295,12 +295,6 @@ void djoin(APP *my_node, other_node *tempNode)
 
 void commands(char *input, char *reg_ip, char *reg_udp, APP *my_node, other_node *tempNode)
 {
-    char action[10]; // *net, id[128];
-    int bootid;
-    // memset(id, 0, sizeof(id));
-    memset(action, 0, strlen(action));
-
-    // action = strtok(input, " ");
 
     if (sscanf(input, "join %d %d", &my_node->net, &my_node->myinfo.id))
     {
@@ -312,12 +306,29 @@ void commands(char *input, char *reg_ip, char *reg_udp, APP *my_node, other_node
     {
         if (my_node->myinfo.id == tempNode->id)
         {
+            my_node->externo = my_node->myinfo;
+            my_node->backup = my_node->myinfo;
             printf("Sou o primeiro nó");
         }
         else
         {
+            my_node->externo = my_node->myinfo;
+            my_node->backup = my_node->myinfo;
             djoin(my_node, tempNode);
         }
+    }
+    else if (strcmp(input, "st\n") == 0)
+    {
+        printf("Meus internos são:\n");
+        for (int i = 0; i < 99; i++)
+        {
+            if (my_node->internos[i].fd != 0)
+            {
+                printf("%d %s %s\n", my_node->internos[i].id, my_node->internos[i].ip, my_node->internos[i].port);
+            }
+        }
+        printf("O meu externo é : %d %s %s\n", my_node->externo.id, my_node->externo.ip, my_node->externo.port);
+        printf("O meu backup é : %d %s %s\n", my_node->backup.id, my_node->backup.ip, my_node->backup.port);
     }
     // else if (strcmp(action, "leave" && net != NULL) == 0)
     // {
@@ -384,6 +395,7 @@ int main(int argc, char *argv[])
     memset(&my_node, 0, sizeof(my_node));
     memset(&clients, 0, sizeof(clients));
     memset(buffer, 0, sizeof(buffer));
+    memset(&my_node.internos, 0, sizeof(my_node.internos));
 
     if (argc != 5)
     {
@@ -474,6 +486,7 @@ int main(int argc, char *argv[])
                     exit(1);
                 else
                 {
+                    buffer[n] = '\0';
                     commands(buffer, reg_ip, reg_udp, &my_node, &tempNode);
                     if (tempNode.fd != 0)
                     {
@@ -533,6 +546,8 @@ int main(int argc, char *argv[])
                             {
 
                                 buffer[n] = '\0';
+                                printf("My id: %d\n", my_node.myinfo.id);
+                                printf("My extern: %d\n", my_node.externo.id);
                                 read_msg(&(clients[i]), &my_node, buffer); // fd do no a enviar mensagem, mensagem a ler
                             }
                             counter--;
