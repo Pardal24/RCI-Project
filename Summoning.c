@@ -285,14 +285,54 @@ void djoin(My_Node *my_node, Node *tempNode)
     tempNode->fd = tcp_communication(tempNode->ip, tempNode->port, msg_send);
 }
 
-// int leave()
-// {
+void leave(Node *tempNode, My_Node *my_node)
+{
+    char msg_send[128];
+    memset(msg_send, 0, sizeof(msg_send));
 
-//     // 1 - apagar o seu contacto do servidor de nós
-//     // UNREG net id - mensagem de retiro da rede
-//     // receber OKUNREG do servidor
-//     // 2 - terminar as sessões TCP com todos os seus vizinhos (há lista de vizinhos)?
-// }
+    printf("Connection closed by client on socket %d\n", tempNode->fd);
+    if (my_node->externo.id == tempNode->id) // externo deu leave -> meto como externo o meu backup
+    {
+        memset(&my_node->externo, 0, sizeof(my_node->externo));
+
+        if (my_node->myinfo.id == my_node->backup.id) // sou ancora, logo o meu externo que saiu, tambem era ancora -> tenho de eleger outra ancora
+        {
+            // escolher um interno para ser ancora
+            // mandar uma mensagem "EXTERN" para ele (ele vai receber e atualizar verificar que recebeu uma mensagem do externo )
+            //  O nó que receber esta mensagem vai perceber que recebeu um nó de backup que é igual a si proprio
+            //  logo fui eleito ancora, -> o meu externo mantém-se, passo a ser o meu próprio backup, e atualizo o backup dos meus internos
+
+            // Mandar msg para os meus internos a informar do novo backup deles.
+            // for(i=0; i<100; i++)
+            // if(My_node->interno[i].fd!=0);
+            //  My_node->externo = My_node->interno[i];
+            //  memset(my_node->interno[i]);
+            //  break;´
+            // manda Extern para todos os vizinhos
+
+            // mandar extern de mim mesmo para um dos meus internos;
+            sprintf(msg_send, "EXTERN %02d %s %s", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
+        }
+        sprintf(msg_send, "NEW %02d %s %s", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
+        printf("Mensagem enviada: %s -----> id %02d\n", msg_send, my_node->backup.id);
+        tempNode->fd = tcp_communication(my_node->backup.ip, my_node->backup.port, msg_send);
+
+        memset(msg_send, 0, sizeof(msg_send));
+        sprintf(msg_send, "EXTERN %02d %s %s", my_node->backup.id, my_node->backup.ip, my_node->backup.port);
+        for (int i = 0; i < 100; i++)
+        {
+            if (write(my_node->internos[i].fd, msg_send, strlen(msg_send)) == -1)
+            {
+                printf("error: %s\n", strerror(errno));
+                exit(1);
+            }
+        }
+    }
+    else // interno deu leave -> fecha apenas a porta com esse interno
+    {
+        memset(&my_node->internos[tempNode->id], 0, sizeof(my_node->internos[tempNode->id]));
+    }
+}
 
 void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *tempNode)
 {
@@ -338,20 +378,19 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
         memset(registo, 0, sizeof(registo));
         memset(ok_reg, 0, sizeof(ok_reg));
 
-        // for (int i = 0; i < 100; i++)
-        // {
-        //     if (my_node->internos[i].fd != 0)
-        //     {
-        //         close(my_node->internos[i].fd);
-        //     }
-        // }
-        // close(my_node->externo.fd);
-        // close(my_node->backup.fd);
-
         sprintf(registo, "UNREG %03d %02d", my_node->net, my_node->myinfo.id);
         printf("%s\n", registo);
-        strcpy(ok_reg,udp_communication(reg_ip, reg_udp, registo));
+        strcpy(ok_reg, udp_communication(reg_ip, reg_udp, registo));
         printf("%s\n", ok_reg);
+
+        for (int i = 0; i < 100; i++)
+        {
+            if (my_node->internos[i].fd != 0)
+            {
+                close(my_node->internos[i].fd);
+            }
+        }
+        close(my_node->externo.fd);
     }
     // else if (strcmp(action, "leave" && net != NULL) == 0)
     // {
@@ -491,8 +530,6 @@ int main(int argc, char *argv[])
                 if ((newfd = accept(my_node.myinfo.fd, (struct sockaddr *)&addr, &addrlen)) == -1) /*error*/
                     exit(EXIT_FAILURE);
 
-                tempNode.fd=newfd;
-
                 clients[client_count].fd = newfd;
                 if (maxfd < newfd)
                 {
@@ -532,7 +569,6 @@ int main(int argc, char *argv[])
             {
                 for (; counter > 0; counter--)
                 {
-
                     for (i = 0; i < client_count; i++)
                     {
                         if (FD_ISSET(clients[i].fd, &rfds))
@@ -546,15 +582,7 @@ int main(int argc, char *argv[])
                             }
                             if (n == 0)
                             {
-                                printf("Connection closed by client on socket %d\n", clients[i].fd);
-                                if (my_node.externo.id == clients[i].id)
-                                {
-                                    memset(&my_node.externo, 0, sizeof(my_node.externo));
-                                }
-                                else
-                                {
-                                    memset(&my_node.internos[clients[i].id], 0, sizeof(my_node.internos[clients[i].id]));
-                                }
+                                leave(&(clients[i]), &my_node);
                                 close(clients[i].fd);
                                 memset(&clients[i], 0, sizeof(clients[i]));
                                 client_count--;
