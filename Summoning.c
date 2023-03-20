@@ -27,7 +27,7 @@ typedef struct other_node
 typedef struct APP
 {
     other_node myinfo;
-    other_node internos[99];
+    other_node internos[100];
     other_node externo;
     other_node backup;
     int net;
@@ -257,6 +257,7 @@ void join(char *regIP, char *regUDP, APP *my_node, other_node *tempNode)
         }
 
         index = rand() % i;
+        printf("Sou o i: %d\n", i);
         strcpy(rdm_node, node_list[index]);
         printf("%s\n", rdm_node);
 
@@ -320,7 +321,7 @@ void commands(char *input, char *reg_ip, char *reg_udp, APP *my_node, other_node
     else if (strcmp(input, "st\n") == 0)
     {
         printf("Meus internos são:\n");
-        for (int i = 0; i < 99; i++)
+        for (int i = 0; i < 100; i++)
         {
             if (my_node->internos[i].fd != 0)
             {
@@ -544,7 +545,6 @@ int main(int argc, char *argv[])
                             }
                             else
                             {
-
                                 buffer[n] = '\0';
                                 printf("My id: %d\n", my_node.myinfo.id);
                                 printf("My extern: %d\n", my_node.externo.id);
