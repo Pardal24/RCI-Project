@@ -16,22 +16,22 @@
 #define MAX_BUFFER_SIZE 1024
 #define MAX_CONNECTIONS 100
 
-typedef struct other_node
+typedef struct Node
 {
     int id;
     char ip[30];
     char port[10];
     int fd;
-} other_node;
+} Node;
 
-typedef struct APP
+typedef struct My_Node
 {
-    other_node myinfo;
-    other_node internos[100];
-    other_node externo;
-    other_node backup;
+    Node myinfo;
+    Node internos[100];
+    Node externo;
+    Node backup;
     int net;
-} APP;
+} My_Node;
 
 char *My_IP()
 {
@@ -114,9 +114,9 @@ int tcp_communication(char *n_ip, char *n_port, char *msg) // Vou ter de dar ret
     return fd;
 }
 
-void read_msg(other_node *tempNode, APP *my_node, char *buffer) // Vai ler a mensagem recebida pelo nó
+void read_msg(Node *tempNode, My_Node *my_node, char *buffer) // Vai ler a mensagem recebida pelo nó
 {
-    other_node extern_Node;
+    Node extern_Node;
     memset(&extern_Node, 0, sizeof(extern_Node));
 
     if (sscanf(buffer, "NEW %d %s %s", &tempNode->id, tempNode->ip, tempNode->port) == 3)
@@ -172,7 +172,7 @@ void read_msg(other_node *tempNode, APP *my_node, char *buffer) // Vai ler a men
     }
 }
 
-int cmpr_id(char *node_list[], APP *my_node, int size)
+int cmpr_id(char *node_list[], My_Node *my_node, int size)
 {
 
     int i, confirm = 0, j = 0, id;
@@ -213,7 +213,7 @@ int cmpr_id(char *node_list[], APP *my_node, int size)
     return 0;
 }
 
-void join(char *regIP, char *regUDP, APP *my_node, other_node *tempNode)
+void join(char *regIP, char *regUDP, My_Node *my_node, Node *tempNode)
 {
     char registo[128], *ok_reg, *node_list[MAX_CONNECTIONS];
     char *line, rdm_node[128];
@@ -274,7 +274,7 @@ void join(char *regIP, char *regUDP, APP *my_node, other_node *tempNode)
     printf("%s\n", ok_reg);
 }
 
-void djoin(APP *my_node, other_node *tempNode)
+void djoin(My_Node *my_node, Node *tempNode)
 {
     char msg_send[128];
 
@@ -294,7 +294,7 @@ void djoin(APP *my_node, other_node *tempNode)
 //     // 2 - terminar as sessões TCP com todos os seus vizinhos (há lista de vizinhos)?
 // }
 
-void commands(char *input, char *reg_ip, char *reg_udp, APP *my_node, other_node *tempNode)
+void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *tempNode)
 {
 
     if (sscanf(input, "join %d %d", &my_node->net, &my_node->myinfo.id))
@@ -330,6 +330,28 @@ void commands(char *input, char *reg_ip, char *reg_udp, APP *my_node, other_node
         }
         printf("O meu externo é : %d %s %s\n", my_node->externo.id, my_node->externo.ip, my_node->externo.port);
         printf("O meu backup é : %d %s %s\n", my_node->backup.id, my_node->backup.ip, my_node->backup.port);
+    }
+    else if (strcmp(input, "leave\n") == 0)
+    {
+        char registo[128], ok_reg[128];
+
+        memset(registo, 0, sizeof(registo));
+        memset(ok_reg, 0, sizeof(ok_reg));
+
+        // for (int i = 0; i < 100; i++)
+        // {
+        //     if (my_node->internos[i].fd != 0)
+        //     {
+        //         close(my_node->internos[i].fd);
+        //     }
+        // }
+        // close(my_node->externo.fd);
+        // close(my_node->backup.fd);
+
+        sprintf(registo, "UNREG %03d %02d", my_node->net, my_node->myinfo.id);
+        printf("%s\n", registo);
+        strcpy(ok_reg,udp_communication(reg_ip, reg_udp, registo));
+        printf("%s\n", ok_reg);
     }
     // else if (strcmp(action, "leave" && net != NULL) == 0)
     // {
@@ -389,9 +411,9 @@ int main(int argc, char *argv[])
     char reg_ip[30];
     char reg_udp[6];
     // nossas estruturas
-    APP my_node;
-    other_node tempNode;
-    other_node clients[100];
+    My_Node my_node;
+    Node tempNode;
+    Node clients[100];
 
     memset(&my_node, 0, sizeof(my_node));
     memset(&clients, 0, sizeof(clients));
@@ -469,12 +491,14 @@ int main(int argc, char *argv[])
                 if ((newfd = accept(my_node.myinfo.fd, (struct sockaddr *)&addr, &addrlen)) == -1) /*error*/
                     exit(EXIT_FAILURE);
 
+                tempNode.fd=newfd;
+
                 clients[client_count].fd = newfd;
                 if (maxfd < newfd)
                 {
                     maxfd = newfd;
                 }
-                printf("Client counte: %d\n", client_count);
+                printf("Client count: %d\n", client_count);
                 client_count++;
                 counter--;
             }
