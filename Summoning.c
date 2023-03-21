@@ -285,13 +285,13 @@ void djoin(My_Node *my_node, Node *tempNode)
     tempNode->fd = tcp_communication(tempNode->ip, tempNode->port, msg_send);
 }
 
-void leave(Node *tempNode, My_Node *my_node)
+void leave(Node *leaving_node, My_Node *my_node, Node *tempNode)
 {
     char msg_send[128];
     memset(msg_send, 0, sizeof(msg_send));
 
-    printf("Connection closed by client on socket %d\n", tempNode->fd);
-    if (my_node->externo.id == tempNode->id) // externo deu leave -> meto como externo o meu backup
+    printf("Connection closed by client on socket %d\n", leaving_node->fd);
+    if (my_node->externo.id == leaving_node->id) // externo deu leave -> meto como externo o meu backup
     {
         memset(&my_node->externo, 0, sizeof(my_node->externo));
 
@@ -318,19 +318,23 @@ void leave(Node *tempNode, My_Node *my_node)
         tempNode->fd = tcp_communication(my_node->backup.ip, my_node->backup.port, msg_send);
 
         memset(msg_send, 0, sizeof(msg_send));
-        sprintf(msg_send, "EXTERN %02d %s %s", my_node->backup.id, my_node->backup.ip, my_node->backup.port);
+        sprintf(msg_send, "EXTERN %02d %s %s", my_node->backup.id, my_node->backup.ip, my_node->backup.port); // mando info do meu novo externo aos internos
+
         for (int i = 0; i < 100; i++)
         {
-            if (write(my_node->internos[i].fd, msg_send, strlen(msg_send)) == -1)
+            if (my_node->internos[i].fd != 0)
             {
-                printf("error: %s\n", strerror(errno));
-                exit(1);
+                if (write(my_node->internos[i].fd, msg_send, strlen(msg_send)) == -1)
+                {
+                    printf("error: %s\n", strerror(errno));
+                    exit(1);
+                }
             }
         }
     }
     else // interno deu leave -> fecha apenas a porta com esse interno
     {
-        memset(&my_node->internos[tempNode->id], 0, sizeof(my_node->internos[tempNode->id]));
+        memset(&my_node->internos[leaving_node->id], 0, sizeof(my_node->internos[leaving_node->id]));
     }
 }
 
@@ -439,7 +443,7 @@ int main(int argc, char *argv[])
     char *type, *action, *bootIP, *name;
     char buffer[MAX_BUFFER_SIZE];
     int newfd, n;
-    int client_count = 0, maxfd = 0, counter, i, id;
+    int client_count = 0, maxfd = 0, counter, i, j, id;
     struct sockaddr_in addr;
     fd_set rfds;
     socklen_t addrlen;
@@ -582,11 +586,39 @@ int main(int argc, char *argv[])
                             }
                             if (n == 0)
                             {
-                                leave(&(clients[i]), &my_node);
-                                close(clients[i].fd);
-                                memset(&clients[i], 0, sizeof(clients[i]));
+                                // funcao leave recebe como argumentos o nó que sai, a info do meu nó e o possível nó que terei de me juntar
+                                leave(&(clients[i]), &my_node, &tempNode);
+                                close(clients[i].fd);                       // garanto que a conexão do nó que saiu está fechada
+                                memset(&clients[i], 0, sizeof(clients[i])); // limpo toda a informação guardada pelo nó no array
+                                for (j = client_count; j >= 0; j--)         // organização da lista de nós
+                                {
+                                    if (clients[client_count].fd == 0) // Se no index do client_count dos clients tiver a 0, foi esse nó que saiu não é preciso mais nada
+                                    {
+                                        break;
+                                    }
+                                    else // Se o nó que saiu tiver a meio do array, meter o último nó do array e meter no lugar do que saiu
+                                    {
+                                        if (clients[j].fd == 0)
+                                        {
+                                            clients[j] = clients[client_count];
+                                            memset(&clients[client_count], 0, sizeof(clients[client_count])); // limpar o lugar do último nó que foi reorganizado
+                                        }
+                                    }
+                                }
                                 client_count--;
-                                maxfd = 0;
+                                if (tempNode.fd != 0) // Aqueles a que se ligaram a um novo externo precisam de adicionar um novo nó a lista
+                                {
+                                    clients[client_count++] = tempNode;
+                                    printf("Client_count: %d\n", client_count);
+                                    for (int i = 0; i < client_count; i++)
+                                    {
+                                        if (clients[i].fd > maxfd)
+                                        {
+                                            maxfd = clients[i].fd;
+                                        }
+                                    }
+                                }
+                                maxfd = 0; // procuramos o novo maxfd
                                 for (int i = 0; i < client_count; i++)
                                 {
                                     if (clients[i].fd > maxfd)
