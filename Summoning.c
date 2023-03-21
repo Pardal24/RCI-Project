@@ -352,7 +352,7 @@ void leave(Node *leaving_node, My_Node *my_node, Node *tempNode)
     }
 }
 
-void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *tempNode)
+void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *tempNode, fd_set *rfds, Node *clients)
 {
 
     if (sscanf(input, "join %d %d", &my_node->net, &my_node->myinfo.id))
@@ -392,22 +392,36 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
     else if (strcmp(input, "leave\n") == 0)
     {
         char registo[128], ok_reg[128];
+        char *line;
 
         memset(registo, 0, sizeof(registo));
         memset(ok_reg, 0, sizeof(ok_reg));
 
-        sprintf(registo, "UNREG %03d %02d", my_node->net, my_node->myinfo.id);
-        printf("%s\n", registo);
+        sprintf(registo, "NODES %03d", my_node->net);
         strcpy(ok_reg, udp_communication(reg_ip, reg_udp, registo));
-        printf("%s\n", ok_reg);
 
-        for (int i = 0; i < 100; i++)
+        line = strtok(ok_reg, "\n");
+        line = strtok(NULL, "\n");
+        if (line != NULL) //Se for no djoin não faz sentido dar unreg
         {
-            close(my_node->internos[i].fd);
-            memset(&my_node->internos[i], 0, sizeof(my_node->internos[i]));
+            memset(registo, 0, sizeof(registo));
+            memset(ok_reg, 0, sizeof(ok_reg));
+            sprintf(registo, "UNREG %03d %02d", my_node->net, my_node->myinfo.id); // tudo muito giro mas nao funciona se for por djoin
+            printf("%s\n", registo);
+            strcpy(ok_reg, udp_communication(reg_ip, reg_udp, registo));
+            printf("%s\n", ok_reg);
         }
-        close(my_node->externo.fd);
+
+        for (int i = 0; i < 100; i++) //dou clean dos meus internos e externos
+        {
+            if (my_node->internos[i].fd != 0)
+            {
+                memset(&my_node->internos[i], 0, sizeof(my_node->internos[i]));
+            }
+        }
         memset(&my_node->externo, 0, sizeof(my_node->externo));
+        my_node->externo = my_node->myinfo; //volto a meter na forma default
+        my_node->backup = my_node->myinfo;
     }
 }
 
@@ -561,12 +575,22 @@ int main(int argc, char *argv[])
                 else
                 {
                     buffer[n] = '\0';
-                    commands(buffer, reg_ip, reg_udp, &my_node, &tempNode);
+
+                    if (strcmp(buffer, "leave\n") == 0)
+                    {
+                        for (i = 0; i < client_count; i++)
+                        {
+                            close(clients[i].fd);
+                        }
+                        client_count = 0;
+                    }
+                    commands(buffer, reg_ip, reg_udp, &my_node, &tempNode, &rfds, clients);
+
                     if (tempNode.fd != 0)
                     {
                         clients[client_count++] = tempNode;
                         printf("Client_count: %d\n", client_count);
-                        for (int i = 0; i < client_count; i++)
+                        for (i = 0; i < client_count; i++)
                         {
                             if (clients[i].fd > maxfd)
                             {
@@ -577,7 +601,7 @@ int main(int argc, char *argv[])
                 }
                 counter--;
             }
-            else // nao mexi aqui
+            else 
             {
                 for (; counter > 0; counter--)
                 {
@@ -596,7 +620,7 @@ int main(int argc, char *argv[])
                             {
                                 // funcao leave recebe como argumentos o nó que sai, a info do meu nó e o possível nó que terei de me juntar
                                 leave(&(clients[i]), &my_node, &tempNode);
-                                close(clients[i].fd);                       // garanto que a conexão do nó que saiu está fechada
+                                close(clients[i].fd);           // garanto que a conexão do nó que saiu está fechada
                                 memset(&clients[i], 0, sizeof(clients[i])); // limpo toda a informação guardada pelo nó no array
                                 for (j = client_count; j >= 0; j--)         // organização da lista de nós
                                 {
