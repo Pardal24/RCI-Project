@@ -288,6 +288,7 @@ void djoin(My_Node *my_node, Node *tempNode)
 void leave(Node *leaving_node, My_Node *my_node, Node *tempNode)
 {
     char msg_send[128];
+    int i;
     memset(msg_send, 0, sizeof(msg_send));
 
     printf("Connection closed by client on socket %d\n", leaving_node->fd);
@@ -297,22 +298,35 @@ void leave(Node *leaving_node, My_Node *my_node, Node *tempNode)
 
         if (my_node->myinfo.id == my_node->backup.id) // sou ancora, logo o meu externo que saiu, tambem era ancora -> tenho de eleger outra ancora
         {
-            // escolher um interno para ser ancora
-            // mandar uma mensagem "EXTERN" para ele (ele vai receber e atualizar verificar que recebeu uma mensagem do externo )
-            //  O nó que receber esta mensagem vai perceber que recebeu um nó de backup que é igual a si proprio
-            //  logo fui eleito ancora, -> o meu externo mantém-se, passo a ser o meu próprio backup, e atualizo o backup dos meus internos
-
-            // Mandar msg para os meus internos a informar do novo backup deles.
-            // for(i=0; i<100; i++)
-            // if(My_node->interno[i].fd!=0);
-            //  My_node->externo = My_node->interno[i];
-            //  memset(my_node->interno[i]);
-            //  break;´
-            // manda Extern para todos os vizinhos
-
-            // mandar extern de mim mesmo para um dos meus internos;
-            sprintf(msg_send, "EXTERN %02d %s %s", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
+            for (i = 0; i < 100; i++) // escolher um interno para ser ancora
+            {
+                if (my_node->internos[i].fd != 0)
+                {
+                    my_node->externo = my_node->internos[i];
+                    memset(&my_node->internos[i], 0, sizeof(my_node->internos[i]));
+                    break;
+                }
+            }
+            sprintf(msg_send, "EXTERN %02d %s %s", my_node->externo.id, my_node->externo.ip, my_node->externo.port);
+            for (int i = 0; i < 100; i++) // mandar uma mensagem "EXTERN" para os internos
+            {
+                if (my_node->internos[i].fd != 0)
+                {
+                    if (write(my_node->internos[i].fd, msg_send, strlen(msg_send)) == -1)
+                    {
+                        printf("error: %s\n", strerror(errno));
+                        exit(1);
+                    }
+                }
+            }
+            if (write(my_node->externo.fd, msg_send, strlen(msg_send)) == -1) //  O nó que receber esta mensagem vai perceber que recebeu um nó de backup que é igual a si proprio
+            {
+                printf("error: %s\n", strerror(errno));
+                exit(1);
+            }
+            memset(msg_send, 0, sizeof(msg_send));
         }
+
         sprintf(msg_send, "NEW %02d %s %s", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
         printf("Mensagem enviada: %s -----> id %02d\n", msg_send, my_node->backup.id);
         tempNode->fd = tcp_communication(my_node->backup.ip, my_node->backup.port, msg_send);
