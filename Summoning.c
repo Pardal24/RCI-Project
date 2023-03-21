@@ -403,21 +403,12 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
 
         for (int i = 0; i < 100; i++)
         {
-            if (my_node->internos[i].fd != 0)
-            {
-                close(my_node->internos[i].fd);
-            }
+            close(my_node->internos[i].fd);
+            memset(&my_node->internos[i], 0, sizeof(my_node->internos[i]));
         }
         close(my_node->externo.fd);
+        memset(&my_node->externo, 0, sizeof(my_node->externo));
     }
-    // else if (strcmp(action, "leave" && net != NULL) == 0)
-    // {
-
-    //     printf("UNREG %s %s\n", net, id);
-    //     // leaveNetwork(); //UNREG NET ID
-    //     net = NULL;
-    //     id = NULL;
-    // }
 }
 
 int tcp_listener(char *port)
@@ -535,8 +526,11 @@ int main(int argc, char *argv[])
         printf("Tou a espera\n");
         counter = select(maxfd + 1, &rfds, (fd_set *)NULL, (fd_set *)NULL, (struct timeval *)NULL);
 
-        if (counter <= 0) /*error*/
+        if (counter <= 0)
+        { /*error*/
+            printf("counter deu mrd");
             exit(1);
+        }
 
         while (counter > 0)
         {
