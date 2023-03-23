@@ -105,8 +105,6 @@ int tcp_communication(char *n_ip, char *n_port, char *msg) // Vou ter de dar ret
     if (n == -1) /*error*/
         exit(1);
 
-    printf("Vou enviar esta msg por TCP: %s\n", msg);
-
     if (write(fd, msg, strlen(msg)) == -1)
     {
         printf("error: %s\n", strerror(errno));
@@ -120,8 +118,6 @@ void read_msg(Node *tempNode, My_Node *my_node, char *buffer) // Vai ler a mensa
 {
     Node extern_Node;
     memset(&extern_Node, 0, sizeof(extern_Node));
-
-    printf("== tempNode data: %02d %s %s\n", tempNode->id, tempNode->ip, tempNode->port);
 
     if (sscanf(buffer, "NEW %d %s %s", &tempNode->id, tempNode->ip, tempNode->port) == 3)
     {
@@ -158,11 +154,11 @@ void read_msg(Node *tempNode, My_Node *my_node, char *buffer) // Vai ler a mensa
 
     if (sscanf(buffer, "EXTERN %d %s %s", &extern_Node.id, extern_Node.ip, extern_Node.port) == 3)
     {
-        printf("Mensagem recebida do nó %02d: %s \n", tempNode->id, buffer);
-        if (tempNode->id == extern_Node.id) // se o id do nó que me envia o externo for igual ao id me enviado então fui eleito ancora, logo o meu externo é ele e eu sou o meu backup
+        printf("Mensagem recebida: %s\n", buffer);
+        if (tempNode->id == extern_Node.id) // se o id do nó que me envia o externo for igual ao id me enviado entao o meu externo será o no que comunicou comigo
         {
-            my_node->externo = *tempNode;      // o meu externo é aquele que me enviou a mensagem
-            my_node->backup = my_node->myinfo; // o meu backup é eu próprio
+            my_node->externo = *tempNode; // o meu externo é aquele que me enviou a mensagem
+            my_node->backup = my_node->myinfo;
             printf("My extern is: %02d %s %s\n", tempNode->id, tempNode->ip, tempNode->port);
             memset(buffer, 0, strlen(buffer));
         }
@@ -290,88 +286,157 @@ void djoin(My_Node *my_node, Node *tempNode)
     tempNode->fd = tcp_communication(tempNode->ip, tempNode->port, msg_send);
 }
 
+// void leave(Node *leaving_node, My_Node *my_node, Node *tempNode)
+// {
+//     char msg_send[128];
+//     int i, found_interns = 0;
+//     memset(msg_send, 0, sizeof(msg_send));
+
+//     printf("Connection closed by client on socket %d\n", leaving_node->fd);
+//     if (my_node->externo.id == leaving_node->id) // externo deu leave -> meto como externo o meu backup
+//     {
+//         memset(&my_node->externo, 0, sizeof(my_node->externo));
+
+//         if (my_node->myinfo.id == my_node->backup.id) // sou ancora, logo o meu externo que saiu, tambem era ancora -> tenho de eleger outra ancora
+//         {
+//             for (i = 0; i < 100; i++) // escolher um interno para ser ancora
+//             {
+//                 if (my_node->internos[i].fd != 0)
+//                 {
+//                     found_interns = 1;
+//                     my_node->externo = my_node->internos[i];
+//                     memset(&my_node->internos[i], 0, sizeof(my_node->internos[i]));
+//                     break;
+//                 }
+//             }
+//             if (found_interns == 1) // Se não houver internos eu tou sozinho na rede
+//             {
+//                 my_node->externo = my_node->myinfo;
+//                 return;
+//             }
+//             sprintf(msg_send, "EXTERN %02d %s %s", my_node->externo.id, my_node->externo.ip, my_node->externo.port);
+//             for (int i = 0; i < 100; i++) // mandar uma mensagem "EXTERN" para os internos
+//             {
+//                 if (my_node->internos[i].fd != 0)
+//                 {
+//                     if (write(my_node->internos[i].fd, msg_send, strlen(msg_send)) == -1)
+//                     {
+//                         printf("error: %s\n", strerror(errno));
+//                         exit(1);
+//                     }
+//                 }
+//             }
+//             if (write(my_node->externo.fd, msg_send, strlen(msg_send)) == -1) //  O nó que receber esta mensagem vai perceber que recebeu um nó de backup que é igual a si proprio
+//             {
+//                 printf("error: %s\n", strerror(errno));
+//                 exit(1);
+//             }
+//             memset(msg_send, 0, sizeof(msg_send));
+//         }
+//         else // nao sou ancora
+//         {
+//             sprintf(msg_send, "NEW %02d %s %s", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
+//             printf("Mensagem enviada: %s -----> id %02d\n", msg_send, my_node->backup.id);
+//             tempNode->fd = tcp_communication(my_node->backup.ip, my_node->backup.port, msg_send);
+
+//             memset(msg_send, 0, sizeof(msg_send));
+//             sprintf(msg_send, "EXTERN %02d %s %s", my_node->backup.id, my_node->backup.ip, my_node->backup.port); // mando info do meu novo externo aos internos
+
+//             for (int i = 0; i < 100; i++)
+//             {
+//                 if (my_node->internos[i].fd != 0)
+//                 {
+//                     if (write(my_node->internos[i].fd, msg_send, strlen(msg_send)) == -1)
+//                     {
+//                         printf("error: %s\n", strerror(errno));
+//                         exit(1);
+//                     }
+//                 }
+//             }
+//         }
+//     }
+//     else // interno deu leave -> fecha apenas a porta com esse interno
+//     {
+//         memset(&my_node->internos[leaving_node->id], 0, sizeof(my_node->internos[leaving_node->id]));
+//     }
+// }
+
 void leave(Node *leaving_node, My_Node *my_node, Node *tempNode)
 {
     char msg_send[128];
-    int i;
+    int i, first_intern = 0, interno = 0;
     memset(msg_send, 0, sizeof(msg_send));
 
-    printf("Connection closed by client on socket %d\n", leaving_node->fd);
-    if (my_node->externo.id == leaving_node->id) // externo deu leave -> meto como externo o meu backup
+    if (my_node->externo.id == leaving_node->id) // foi um externo que saiu
     {
-        memset(&my_node->externo, 0, sizeof(my_node->externo));
-
-        if (my_node->myinfo.id == my_node->backup.id) // sou ancora, logo o meu externo que saiu, tambem era ancora -> tenho de eleger outra ancora
+        if (my_node->myinfo.id == my_node->backup.id) // o que saiu era uma ancora
         {
-            int Encontrei_interno = 0;
-            for (i = 0; i < 100; i++) // escolher um interno para ser ancora
+            for (int i = 0; i < 100; i++)
             {
                 if (my_node->internos[i].fd != 0)
                 {
-                    Encontrei_interno = 1;
-                    my_node->externo = my_node->internos[i];                        // elegi novo externo
-                    memset(&my_node->internos[i], 0, sizeof(my_node->internos[i])); // deixa de ser interno
-                    sprintf(msg_send, "EXTERN %02d %s %s", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
-                    write(my_node->externo.fd, msg_send, strlen(msg_send)); // mandar msg para o novo externo com o id o meu id, para ele perceber que ele é ancora
-                    break;
+                    if (first_intern == 0)
+                    {
+                        my_node->externo = my_node->internos[i];
+                        sprintf(msg_send, "EXTERN %02d %s %s", my_node->externo.id, my_node->externo.ip, my_node->externo.port);
+                        if (write(my_node->externo.fd, msg_send, strlen(msg_send)) == -1)
+                        {
+                            printf("error: %s\n", strerror(errno));
+                            exit(1);
+                        }
+                        first_intern = 1;
+                    }
+                    if (write(my_node->internos[i].fd, msg_send, strlen(msg_send)) == -1)
+                    {
+                        printf("error: %s\n", strerror(errno));
+                        exit(1);
+                    }
+                    interno = 1;
                 }
             }
-            if (Encontrei_interno == 0) // fiquei sozinho na rede
+            if (interno == 0)
             {
                 my_node->externo = my_node->myinfo;
-                return;
             }
         }
-        else // foi um leave de um externo normal, vou me conectar ao meu backup e avisar os meus internos do novo backup
+        else // o que saiu foi um externo normal
         {
             sprintf(msg_send, "NEW %02d %s %s", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
             printf("Mensagem enviada: %s -----> id %02d\n", msg_send, my_node->backup.id);
+            printf("Meu backup: %d %s %s\n", my_node->backup.id, my_node->backup.ip, my_node->backup.port);
             tempNode->fd = tcp_communication(my_node->backup.ip, my_node->backup.port, msg_send);
+
+            memset(msg_send, 0, sizeof(msg_send));
+            // penso que isto aqui em baixo seja desnecessario
             my_node->externo = my_node->backup;
-            my_node->backup = my_node->myinfo; //como ainda nao tenho externo meto-me em backup temporariamente
-            //adicionar novo cliente ao array de clientes
-        }
+            my_node->backup = my_node->myinfo;
+            ///////////////////////////////////////////////////
+            sprintf(msg_send, "EXTERN %02d %s %s", my_node->backup.id, my_node->backup.ip, my_node->backup.port); // mando info do meu novo externo aos internos
 
-        memset(msg_send, 0, sizeof(msg_send));
-        sprintf(msg_send, "EXTERN %02d %s %s", my_node->externo.id, my_node->externo.ip, my_node->externo.port);
-        for (int i = 0; i < 100; i++) // mandar uma mensagem "EXTERN" para os internos a dizer o novo backup deles
-            if (my_node->internos[i].fd != 0)
-                write(my_node->internos[i].fd, msg_send, strlen(msg_send));
-    }
-    else // interno deu leave -> fecha apenas a porta com esse interno
-    {
-        memset(&my_node->internos[leaving_node->id], 0, sizeof(my_node->internos[leaving_node->id])); // tiro dos internos, depois a porta é fechada.
-    }
-}
-
-void showTopology(My_Node *app)
-{
-    printf("===== SHOW TOPOLOGY =====\n");
-    printf("My Node: %02d %s %s\n", app->myinfo.id, app->myinfo.ip, app->myinfo.port);
-    printf("Externo: %02d %s %s\n", app->externo.id, app->externo.ip, app->externo.port);
-    printf("Backup: %02d %s %s\n", app->backup.id, app->backup.ip, app->backup.port);
-    printf("Internos: \n");
-
-    for (int i = 1; i <= 99; i++)
-    {
-        if (app->internos[i].id != 0)
-        {
-            printf("   %02d %s %s\n", app->internos[i].id, app->internos[i].ip, app->internos[i].port);
+            for (int i = 0; i < 100; i++)
+            {
+                if (my_node->internos[i].fd != 0)
+                {
+                    if (write(my_node->internos[i].fd, msg_send, strlen(msg_send)) == -1)
+                    {
+                        printf("error: %s\n", strerror(errno));
+                        exit(1);
+                    }
+                }
+            }
         }
     }
-
-    printf("=========================\n");
-    return;
+    else // foi um interno que saiu
+    {
+        memset(&my_node->internos[leaving_node->id], 0, sizeof(my_node->internos[leaving_node->id]));
+    }
 }
 
 void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *tempNode, fd_set *rfds, Node *clients)
 {
-    char comando[50] = {0};
-    sscanf(input, "%s ", comando);
 
-    if (strcmp(comando, "join") == 0 && my_node->net == 0) // só posso dar join se não estiver em nenhuma rede
+    if (sscanf(input, "join %d %d", &my_node->net, &my_node->myinfo.id))
     {
-        sscanf(input, "join %d %d", &my_node->net, &my_node->myinfo.id);
         my_node->externo = my_node->myinfo;
         my_node->backup = my_node->myinfo;
         join(reg_ip, reg_udp, my_node, tempNode);
@@ -393,28 +458,30 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
     }
     else if (strcmp(input, "st\n") == 0)
     {
-        showTopology(my_node);
-        /*         printf("Meus internos são:\n");
-                for (int i = 0; i < 100; i++)
-                {
-                    if (my_node->internos[i].fd != 0)
-                    {
-                        printf("%d %s %s\n", my_node->internos[i].id, my_node->internos[i].ip, my_node->internos[i].port);
-                    }
-                }
-                printf("O meu externo é : %d %s %s\n", my_node->externo.id, my_node->externo.ip, my_node->externo.port);
-                printf("O meu backup é : %d %s %s\n", my_node->backup.id, my_node->backup.ip, my_node->backup.port); */
+        printf("Meus internos são:\n");
+        for (int i = 0; i < 100; i++)
+        {
+            if (my_node->internos[i].fd != 0)
+            {
+                printf("%d %s %s\n", my_node->internos[i].id, my_node->internos[i].ip, my_node->internos[i].port);
+            }
+        }
+        printf("O meu externo é : %d %s %s\n", my_node->externo.id, my_node->externo.ip, my_node->externo.port);
+        printf("O meu backup é : %d %s %s\n", my_node->backup.id, my_node->backup.ip, my_node->backup.port);
     }
     else if (strcmp(input, "leave\n") == 0)
     {
+        char registo[128], ok_reg[128];
+        char *line;
+
+        memset(registo, 0, sizeof(registo));
+        memset(ok_reg, 0, sizeof(ok_reg));
+
         if (my_node->net == 0)
         {
             printf("=\nYou are not in a network\n=\n");
             return;
         }
-
-        char registo[128] = {0}, ok_reg[128] = {0};
-        char *line;
 
         sprintf(registo, "NODES %03d", my_node->net);
         strcpy(ok_reg, udp_communication(reg_ip, reg_udp, registo));
@@ -431,16 +498,18 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
             printf("%s\n", ok_reg);
         }
 
-        for (int i = 0; i < 100; i++) // dou clean dos meus internos e externos
+        for (int i = 0; i < 100; i++)
         {
             if (my_node->internos[i].fd != 0)
             {
-                memset(&my_node->internos[i], 0, sizeof(my_node->internos[i]));
+                memset(&my_node->internos[i], 0, sizeof(my_node->internos[i])); // limpar internos
             }
         }
-        memset(&my_node->externo, 0, sizeof(my_node->externo));
+        memset(&my_node->externo, 0, sizeof(my_node->externo)); // limpar externo
+
         my_node->externo = my_node->myinfo; // volto a meter na forma default
         my_node->backup = my_node->myinfo;
+        my_node->myinfo.id = 0;
         my_node->net = 0;
     }
 }
@@ -558,7 +627,7 @@ int main(int argc, char *argv[])
         }
 
         printf("Tou a espera\n");
-        counter = select(FD_SETSIZE, &rfds, (fd_set *)NULL, (fd_set *)NULL, (struct timeval *)NULL);
+        counter = select(maxfd + 1, &rfds, (fd_set *)NULL, (fd_set *)NULL, (struct timeval *)NULL);
 
         if (counter <= 0)
         { /*error*/
@@ -571,7 +640,6 @@ int main(int argc, char *argv[])
 
             if (FD_ISSET(my_node.myinfo.fd, &rfds)) // Notificacao no meu server TCP // o unico caso que isto acontece é a receber uma msg "NEW IP TCP"
             {
-                printf("recebi um pedido de ligacao\n");
                 FD_CLR(my_node.myinfo.fd, &rfds);
                 addrlen = sizeof(addr);
                 if ((newfd = accept(my_node.myinfo.fd, (struct sockaddr *)&addr, &addrlen)) == -1) /*error*/
@@ -601,7 +669,6 @@ int main(int argc, char *argv[])
                     {
                         for (i = 0; i < client_count; i++)
                         {
-                            printf("Fechei ligação com o nó: %02d\n", clients[i].id);
                             close(clients[i].fd);
                         }
                         client_count = 0;
@@ -641,13 +708,12 @@ int main(int argc, char *argv[])
                             if (n == 0)
                             {
                                 // funcao leave recebe como argumentos o nó que sai, a info do meu nó e o possível nó que terei de me juntar
+                                close(clients[i].fd); // garanto que a conexão do nó que saiu está fechada
                                 leave(&(clients[i]), &my_node, &tempNode);
-                                printf("Fechei ligação com o nó: %02d\n", clients[i].id);
-                                close(clients[i].fd);                       // garanto que a conexão do nó que saiu está fechada
                                 memset(&clients[i], 0, sizeof(clients[i])); // limpo toda a informação guardada pelo nó no array
-                                for (j = client_count; j >= 0; j--)         // organização da lista de nós
+                                for (j = (client_count - 1); j >= 0; j--)   // organização da lista de nós
                                 {
-                                    if (clients[client_count].fd == 0) // Sem no index do client_count dos clients tiver a 0, foi esse nó que saiu não é preciso mais nada
+                                    if (clients[(client_count - 1)].fd == 0) // Se no index do client_count dos clients tiver a 0, foi esse nó que saiu não é preciso mais nada
                                     {
                                         break;
                                     }
@@ -655,16 +721,17 @@ int main(int argc, char *argv[])
                                     {
                                         if (clients[j].fd == 0)
                                         {
-                                            clients[j] = clients[client_count];
-                                            memset(&clients[client_count], 0, sizeof(clients[client_count])); // limpar o lugar do último nó que foi reorganizado
+                                            clients[j] = clients[(client_count - 1)];
+                                            memset(&clients[(client_count - 1)], 0, sizeof(clients[(client_count - 1)])); // limpar o lugar do último nó que foi reorganizado
                                         }
                                     }
                                 }
+
                                 client_count--;
-                                if (tempNode.fd != 0) // Aqueles a que se ligaram a um novo externo precisam de adicionar um novo nó a lista
+
+                                if (tempNode.fd != 0) // Aqueles a que se ligaram ao backup precisam de adicionar um novo nó a lista
                                 {
-                                    client_count++;
-                                    clients[client_count] = tempNode;
+                                    clients[client_count++] = tempNode;
                                     printf("Client_count: %d\n", client_count);
                                     for (int i = 0; i < client_count; i++)
                                     {
