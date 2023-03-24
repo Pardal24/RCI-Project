@@ -286,80 +286,6 @@ void djoin(My_Node *my_node, Node *tempNode)
     tempNode->fd = tcp_communication(tempNode->ip, tempNode->port, msg_send);
 }
 
-// void leave(Node *leaving_node, My_Node *my_node, Node *tempNode)
-// {
-//     char msg_send[128];
-//     int i, found_interns = 0, j = 0;
-//     memset(msg_send, 0, sizeof(msg_send));
-
-//     printf("Connection closed by client on socket %d\n", leaving_node->fd);
-//     if (my_node->externo.id == leaving_node->id) // externo deu leave -> meto como externo o meu backup
-//     {
-//         memset(&my_node->externo, 0, sizeof(my_node->externo));
-
-//         if (my_node->myinfo.id == my_node->backup.id) // sou ancora, logo o meu externo que saiu, tambem era ancora -> tenho de eleger outra ancora
-//         {
-
-//             for (i = 0; i < 100; i++) // escolher um interno para ser ancora
-//             {
-//                 if (my_node->internos[i].fd != 0)
-//                 {
-//                     j = i;
-//                     break;
-//                 }
-//             }
-
-//             my_node->externo = my_node->internos[j];
-
-//             sprintf(msg_send, "EXTERN %02d %s %s", my_node->externo.id, my_node->externo.ip, my_node->externo.port);
-//             for (i = 0; i < 100; i++) // escolher um interno para ser ancora
-//             {
-//                 if (my_node->internos[i].fd != 0)
-//                 {
-//                     printf("Mensagem envida: %s -----> id: %02d", msg_send,my_node->internos[i].id );
-//                     if (write(my_node->internos[i].fd, msg_send, strlen(msg_send)) == -1)
-//                     {
-//                         printf("error: %s\n", strerror(errno));
-//                         exit(1);
-//                     }
-//                 }
-//             }
-//             memset(&my_node->internos[j], 0, sizeof(my_node->internos[j]));
-//         }
-//         else // nao sou ancora
-//         {
-//             sprintf(msg_send, "NEW %02d %s %s", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
-//             printf("Mensagem enviada: %s -----> id %02d\n", msg_send, my_node->backup.id);
-//             printf("Meu backup: %d %s %s\n", my_node->backup.id, my_node->backup.ip, my_node->backup.port);
-//             tempNode->fd = tcp_communication(my_node->backup.ip, my_node->backup.port, msg_send);
-//             printf("Fd do no que me junto no leave: %d\n", tempNode->fd);
-
-//             memset(msg_send, 0, sizeof(msg_send));
-//             // penso que isto aqui em baixo seja desnecessario
-//             my_node->externo = my_node->backup;
-//             my_node->backup = my_node->myinfo;
-//             ///////////////////////////////////////////////////
-//             sprintf(msg_send, "EXTERN %02d %s %s", my_node->backup.id, my_node->backup.ip, my_node->backup.port); // mando info do meu novo externo aos internos
-//             for (int i = 0; i < 100; i++)
-//             {
-//                 if (my_node->internos[i].fd != 0)
-//                 {
-//                     printf("Mensagem envida: %s ------> id: %02d\n", msg_send, my_node->internos[i].id);
-//                     if (write(my_node->internos[i].fd, msg_send, strlen(msg_send)) == -1)
-//                     {
-//                         printf("error: %s\n", strerror(errno));
-//                         exit(1);
-//                     }
-//                 }
-//             }
-//         }
-//     }
-//     else // interno deu leave -> fecha apenas a porta com esse interno
-//     {
-//         memset(&my_node->internos[leaving_node->id], 0, sizeof(my_node->internos[leaving_node->id]));
-//     }
-// }
-
 void leave(Node *leaving_node, My_Node *my_node, Node *tempNode)
 {
     char msg_send[128];
@@ -393,8 +319,8 @@ void leave(Node *leaving_node, My_Node *my_node, Node *tempNode)
                             printf("error: %s\n", strerror(errno));
                             exit(1);
                         }
-                        interno = 1;
                     }
+                    interno = 1;
                 }
             }
             if (interno == 0)
