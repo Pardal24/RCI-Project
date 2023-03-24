@@ -443,6 +443,30 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
         my_node->myinfo.id = 0;
         my_node->net = 0;
     }
+    else if (strcmp(input, "exit\n") == 0)
+    {
+        char registo[128], ok_reg[128];
+        char *line;
+
+        memset(registo, 0, sizeof(registo));
+        memset(ok_reg, 0, sizeof(ok_reg));
+        if (my_node->net == 0)
+        {
+            exit(1);
+        }
+        else
+        {
+            sprintf(registo, "NODES %03d", my_node->net);
+            strcpy(ok_reg, udp_communication(reg_ip, reg_udp, registo));
+            memset(registo, 0, sizeof(registo));
+            memset(ok_reg, 0, sizeof(ok_reg));
+            sprintf(registo, "UNREG %03d %02d", my_node->net, my_node->myinfo.id); // tudo muito giro mas nao funciona se for por djoin
+            printf("%s\n", registo);
+            strcpy(ok_reg, udp_communication(reg_ip, reg_udp, registo));
+            printf("%s\n", ok_reg);
+            exit(1);
+        }
+    }
 }
 
 int tcp_listener(char *port)
@@ -596,7 +620,7 @@ int main(int argc, char *argv[])
                 {
                     buffer[n] = '\0';
 
-                    if (strcmp(buffer, "leave\n") == 0)
+                    if (strcmp(buffer, "leave\n") == 0 && strcmp(buffer, "exit\n") == 0)
                     {
                         for (i = 0; i < client_count; i++)
                         {
@@ -689,7 +713,7 @@ int main(int argc, char *argv[])
                                 printf("Quem me envia mensagem %d\n", clients[i].id);
                                 read_msg(&(clients[i]), &my_node, buffer); // fd do no a enviar mensagem, mensagem a ler
                             }
-                            counter--;
+                            // counter--; // provavelmente isto nao é suposto tar aqui mas ta a dar tudo bem por alguma razao
                         }
                     }
                 }
