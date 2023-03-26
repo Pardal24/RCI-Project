@@ -30,6 +30,8 @@ typedef struct My_Node
     Node internos[100];
     Node externo;
     Node backup;
+    int Tabela[100];
+    char lista[100][100];
     int net;
 } My_Node;
 
@@ -363,7 +365,7 @@ void leave(Node *leaving_node, My_Node *my_node, Node *tempNode)
     }
 }
 
-void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *tempNode, fd_set *rfds, Node *clients)
+void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *tempNode)
 {
 
     if (sscanf(input, "join %d %d", &my_node->net, &my_node->myinfo.id))
@@ -429,13 +431,14 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
             printf("%s\n", ok_reg);
         }
 
-        for (int i = 0; i < 100; i++)
-        {
-            if (my_node->internos[i].fd != 0)
-            {
-                memset(&my_node->internos[i], 0, sizeof(my_node->internos[i])); // limpar internos
-            }
-        }
+        // for (int i = 0; i < 100; i++)
+        // {
+        //     if (my_node->internos[i].fd != 0)
+        //     {
+        //         memset(&my_node->internos[i], 0, sizeof(my_node->internos[i])); // limpar internos
+        //     }
+        // }
+        memset(&my_node->internos, 0, sizeof(my_node->internos));
         memset(&my_node->externo, 0, sizeof(my_node->externo)); // limpar externo
 
         my_node->externo = my_node->myinfo; // volto a meter na forma default
@@ -456,8 +459,6 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
         }
         else
         {
-            sprintf(registo, "NODES %03d", my_node->net);
-            strcpy(ok_reg, udp_communication(reg_ip, reg_udp, registo));
             memset(registo, 0, sizeof(registo));
             memset(ok_reg, 0, sizeof(ok_reg));
             sprintf(registo, "UNREG %03d %02d", my_node->net, my_node->myinfo.id); // tudo muito giro mas nao funciona se for por djoin
@@ -466,6 +467,9 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
             printf("%s\n", ok_reg);
             exit(1);
         }
+    }
+    else if (sscanf(input, "get %d %s", &my_node->net, &my_node->myinfo.id))
+    {
     }
 }
 
@@ -627,8 +631,9 @@ int main(int argc, char *argv[])
                             close(clients[i].fd);
                         }
                         client_count = 0;
+                        memset(&clients, 0, sizeof(clients)); // Se der poop apaga
                     }
-                    commands(buffer, reg_ip, reg_udp, &my_node, &tempNode, &rfds, clients);
+                    commands(buffer, reg_ip, reg_udp, &my_node, &tempNode);
 
                     if (tempNode.fd != 0)
                     {
@@ -671,6 +676,7 @@ int main(int argc, char *argv[])
                                 {
                                     if (clients[(client_count - 1)].fd == 0) // Se no index do client_count dos clients tiver a 0, foi esse nó que saiu não é preciso mais nada
                                     {
+
                                         break;
                                     }
                                     else // Se o nó que saiu tiver a meio do array, meter o último nó do array e meter no lugar do que saiu
