@@ -15,6 +15,8 @@
 
 #define MAX_BUFFER_SIZE 1024
 #define MAX_CONNECTIONS 100
+#define MAX_NAME_LEN 100
+#define MAX_NAMES 100
 
 typedef struct Node
 {
@@ -30,8 +32,8 @@ typedef struct My_Node
     Node internos[100];
     Node externo;
     Node backup;
-    int Tabela[100];
-    char lista[100][100];
+    int tabela[100];
+    char list[MAX_NAMES][MAX_NAME_LEN];
     int net;
 } My_Node;
 
@@ -128,6 +130,7 @@ void read_msg(Node *tempNode, My_Node *my_node, char *buffer) // Vai ler a mensa
         if (my_node->externo.id == my_node->myinfo.id) // se o meu externo for eu próprio -> tou sozinho -> digo ao novo nó que sou o externo dele & ele é o meu externo
         {
             my_node->externo = *tempNode;
+            my_node->tabela[my_node->externo.id] = my_node->externo.id;
 
             sprintf(buffer, "EXTERN %02d %s %s", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
             printf("Mensagem envida: %s\n", buffer);
@@ -141,6 +144,7 @@ void read_msg(Node *tempNode, My_Node *my_node, char *buffer) // Vai ler a mensa
         else // se o meu externo não for eu próprio -> já tenho externo -> informo o novo nó o meu externo (o backup dele) e guardo-o como interno
         {
             my_node->internos[tempNode->id] = *tempNode;
+            my_node->tabela[my_node->internos[tempNode->id].id] = my_node->internos[tempNode->id].id;
 
             sprintf(buffer, "EXTERN %02d %s %s", my_node->externo.id, my_node->externo.ip, my_node->externo.port); // envio o meu externo para novo o nó colocar como o seu backup
             printf("Mensagem envida: %s\n", buffer);
@@ -160,6 +164,7 @@ void read_msg(Node *tempNode, My_Node *my_node, char *buffer) // Vai ler a mensa
         if (tempNode->id == extern_Node.id) // se o id do nó que me envia o externo for igual ao id me enviado entao o meu externo será o no que comunicou comigo
         {
             my_node->externo = *tempNode; // o meu externo é aquele que me enviou a mensagem
+            my_node->tabela[my_node->externo.id] = my_node->externo.id;
             my_node->backup = my_node->myinfo;
             printf("My extern is: %02d %s %s\n", tempNode->id, tempNode->ip, tempNode->port);
             memset(buffer, 0, strlen(buffer));
@@ -167,7 +172,10 @@ void read_msg(Node *tempNode, My_Node *my_node, char *buffer) // Vai ler a mensa
         else
         {
             my_node->externo = *tempNode;
+            my_node->tabela[my_node->externo.id] = my_node->externo.id;
             my_node->backup = extern_Node;
+            my_node->tabela[my_node->backup.id] = my_node->externo.id;
+
             printf("My extern is: %02d %s %s\n", tempNode->id, tempNode->ip, tempNode->port);
             printf("My backup is: %02d %s %s\n", extern_Node.id, extern_Node.ip, extern_Node.port);
             memset(buffer, 0, strlen(buffer));
@@ -367,6 +375,8 @@ void leave(Node *leaving_node, My_Node *my_node, Node *tempNode)
 
 void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *tempNode)
 {
+    char name[100];
+    memset(name, '\0', sizeof(name));
 
     if (sscanf(input, "join %d %d", &my_node->net, &my_node->myinfo.id))
     {
@@ -388,6 +398,31 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
             my_node->backup = my_node->myinfo;
             djoin(my_node, tempNode);
         }
+    }
+    else if (sscanf(input, "create %s", name)) // create name
+    {
+        for (int i = 0; i < MAX_NAMES; i++)
+        {
+            if (my_node->list[i][0] == '\0')
+            {
+                strcpy(my_node->list[i], name);            // copy the item to the list
+                my_node->list[i][MAX_NAME_LEN - 1] = '\0'; // make sure the string is null-terminated
+                break;
+            }
+        }
+        printf("New name added to the list: %s", name);
+    }
+    else if (sscanf(input, "delete %s", name)) // delete name
+    {
+        for (int i = 0; i < MAX_NAMES; i++)
+        {
+            if (strcmp(my_node->list[i], name) == 0)
+            {
+                memset(my_node->list[i], '\0', sizeof(my_node->list[i]));
+                break;
+            }
+        }
+        printf("This name was deleted from the list: %s", name);
     }
     else if (strcmp(input, "st\n") == 0)
     {
@@ -590,7 +625,6 @@ int main(int argc, char *argv[])
 
         if (counter <= 0)
         { /*error*/
-            printf("counter deu mrd");
             exit(1);
         }
 
@@ -609,7 +643,7 @@ int main(int argc, char *argv[])
                 {
                     maxfd = newfd;
                 }
-                printf("Client count: %d\n", client_count);
+                // printf("Client count: %d\n", client_count);
                 client_count++;
                 counter--;
             }
@@ -638,7 +672,6 @@ int main(int argc, char *argv[])
                     if (tempNode.fd != 0)
                     {
                         clients[client_count++] = tempNode;
-                        printf("Client_count: %d\n", client_count);
                         for (i = 0; i < client_count; i++)
                         {
                             if (clients[i].fd > maxfd)
@@ -670,7 +703,6 @@ int main(int argc, char *argv[])
                                 // funcao leave recebe como argumentos o nó que sai, a info do meu nó e o possível nó que terei de me juntar
                                 close(clients[i].fd); // garanto que a conexão do nó que saiu está fechada
                                 leave(&(clients[i]), &my_node, &tempNode);
-                                printf("Fd do no que me juntei no main: %d\n", tempNode.fd);
                                 memset(&clients[i], 0, sizeof(clients[i])); // limpo toda a informação guardada pelo nó no array
                                 for (j = (client_count - 1); j >= 0; j--)   // organização da lista de nós
                                 {
@@ -692,7 +724,6 @@ int main(int argc, char *argv[])
                                 if (tempNode.fd != 0) // Aqueles a que se ligaram ao backup precisam de adicionar um novo nó a lista
                                 {
                                     clients[client_count++] = tempNode;
-                                    printf("Client_count: %d\n", client_count);
                                     for (int i = 0; i < client_count; i++)
                                     {
                                         if (clients[i].fd > maxfd)
@@ -709,14 +740,12 @@ int main(int argc, char *argv[])
                                         maxfd = clients[i].fd;
                                     }
                                 }
-                                printf("Client_count: %d", client_count);
                             }
                             else
                             {
                                 buffer[n] = '\0';
                                 printf("My id: %d\n", my_node.myinfo.id);
                                 printf("My extern: %d\n", my_node.externo.id);
-                                printf("Quem me envia mensagem %d\n", clients[i].id);
                                 read_msg(&(clients[i]), &my_node, buffer); // fd do no a enviar mensagem, mensagem a ler
                             }
                             // counter--; // provavelmente isto nao é suposto tar aqui mas ta a dar tudo bem por alguma razao
