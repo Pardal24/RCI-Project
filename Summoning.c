@@ -77,8 +77,6 @@ char *udp_communication(char *IP_server, char *port, char *msg)
     struct sockaddr addr;
     socklen_t addrlen;
     char buffer[2016];
-    char host[NI_MAXHOST], service[NI_MAXSERV]; // consts in <netdb.h>
-    /*...*/                                     // see previous task code
     addrlen = sizeof(addr);
 
     n = recvfrom(fd, buffer, 2016, 0, &addr, &addrlen);
@@ -173,7 +171,7 @@ void read_msg(Node *tempNode, My_Node *my_node, char *buffer) // Vai ler a mensa
 
     if (sscanf(buffer, "NEW %d %s %s", &tempNode->id, tempNode->ip, tempNode->port))
     {
-        printf("Mensagem recebida: %s\n", buffer);
+        printf("Mensagem recebida: %s\n",tempNode->id, buffer);
         memset(buffer, 0, strlen(buffer));
         if (my_node->externo.id == my_node->myinfo.id) // se o meu externo for eu próprio -> tou sozinho -> digo ao novo nó que sou o externo dele & ele é o meu externo
         {
@@ -181,7 +179,7 @@ void read_msg(Node *tempNode, My_Node *my_node, char *buffer) // Vai ler a mensa
             my_node->tabela[my_node->externo.id] = my_node->externo.id;
 
             sprintf(buffer, "EXTERN %02d %s %s\n", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
-            printf("Mensagem envida: %s\n", buffer);
+            printf("Mensagem enviada: %s\n", buffer);
 
             if (write(tempNode->fd, buffer, strlen(buffer)) == -1)
             {
@@ -213,7 +211,7 @@ void read_msg(Node *tempNode, My_Node *my_node, char *buffer) // Vai ler a mensa
             my_node->externo = *tempNode; // o meu externo é aquele que me enviou a mensagem
             my_node->tabela[my_node->externo.id] = my_node->externo.id;
             my_node->backup = my_node->myinfo;
-            printf("My extern is: %02d %s %s\n", tempNode->id, tempNode->ip, tempNode->port);
+            // printf("My extern is: %02d %s %s\n", tempNode->id, tempNode->ip, tempNode->port);
             memset(buffer, 0, strlen(buffer));
         }
         else
@@ -224,8 +222,8 @@ void read_msg(Node *tempNode, My_Node *my_node, char *buffer) // Vai ler a mensa
             if (my_node->backup.id != my_node->myinfo.id)
                 my_node->tabela[my_node->backup.id] = my_node->externo.id;
 
-            printf("My extern is: %02d %s %s\n", tempNode->id, tempNode->ip, tempNode->port);
-            printf("My backup is: %02d %s %s\n", extern_Node.id, extern_Node.ip, extern_Node.port);
+            // printf("My extern is: %02d %s %s\n", tempNode->id, tempNode->ip, tempNode->port);
+            // printf("My backup is: %02d %s %s\n", extern_Node.id, extern_Node.ip, extern_Node.port);
             memset(buffer, 0, strlen(buffer));
         }
     }
@@ -359,10 +357,6 @@ int cmpr_id(char *node_list[], My_Node *my_node, int size)
             {
                 confirm = 1;
             }
-            // if (strncmp(node_list[j], my_node->myinfo.id, 2) == 0)
-            // {
-            //     confirm = 1;
-            // }
         }
 
         id_list[id] = 1;
@@ -398,12 +392,21 @@ void join(char *regIP, char *regUDP, My_Node *my_node, Node *tempNode)
     struct Msg new_tcp;
     int i = 0, index, size = (sizeof(node_list) / sizeof(node_list[0]));
 
+    memset(node_list, '\0', sizeof(node_list));
+    memset(rdm_node, '\0',sizeof(rdm_node));
+    memset(registo, '\0', sizeof(registo));
+    memset(msg.recv, '\0',sizeof(msg.recv));
+    memset(msg.send, '\0',sizeof(msg.send));
+    memset(new_tcp.recv, '\0',sizeof(new_tcp.recv));
+    memset(new_tcp.send, '\0',sizeof(new_tcp.send));
+
+
+
     sprintf(msg.send, "NODES %03d", my_node->net);
     strcpy(msg.recv, udp_communication(regIP, regUDP, msg.send)); // udp_communication2(regIP, regUDP, msg) msg.send e msg.recv
 
     printf("%s\n", msg.recv);
 
-    memset(node_list, '\0', sizeof(node_list));
 
     line = strtok(msg.recv, "\n");
     line = strtok(NULL, "\n");
@@ -427,9 +430,7 @@ void join(char *regIP, char *regUDP, My_Node *my_node, Node *tempNode)
         }
 
         index = rand() % i;
-        printf("Sou o i: %d\n", i);
         strcpy(rdm_node, node_list[index]);
-        printf("%s\n", rdm_node);
 
         sscanf(rdm_node, "%d %s %s", &tempNode->id, tempNode->ip, tempNode->port);
 
@@ -506,7 +507,6 @@ void leave(Node *leaving_node, My_Node *my_node, Node *tempNode)
                     }
                     else
                     {
-                        printf("%s to %d\n", msg_send, my_node->internos[i].id);
                         if (write(my_node->internos[i].fd, msg_send, strlen(msg_send)) == -1)
                         {
                             printf("error: %s\n", strerror(errno));
@@ -599,7 +599,7 @@ void get_name(My_Node *my_node, int dest, char name[100])
     else
     {
         sprintf(msg, "QUERY %02d %02d %s\n", dest, my_node->myinfo.id, name);
-        printf("%s", msg);
+        // printf("%s", msg);
         if (my_node->tabela[dest] != -1) // Se o destino já tiver na tabela
         {
             vizinho = my_node->tabela[dest]; // saber qual o vizinho que chega ao destino
@@ -616,9 +616,9 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
 {
     char name[100];
     int dest;
-    memset(name, '\0', sizeof(name));
+    memset(name,'\0', sizeof(name));
 
-    if (sscanf(input, "join %d %d", &my_node->net, &my_node->myinfo.id))
+    if (sscanf(input, "join %d %d\n", &my_node->net, &my_node->myinfo.id))
     {
         my_node->externo = my_node->myinfo;
         my_node->backup = my_node->myinfo;
@@ -630,7 +630,7 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
         {
             my_node->externo = my_node->myinfo;
             my_node->backup = my_node->myinfo;
-            printf("Sou o primeiro nó");
+            printf("Sou o primeiro nó\n");
         }
         else
         {
@@ -715,8 +715,8 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
         char registo[128], ok_reg[128];
         char *line;
 
-        memset(registo, 0, sizeof(registo));
-        memset(ok_reg, 0, sizeof(ok_reg));
+        memset(registo, '\0', sizeof(registo));
+        memset(ok_reg, '\0', sizeof(ok_reg));
 
         if (my_node->net == 0)
         {
@@ -731,8 +731,8 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
         line = strtok(NULL, "\n");
         if (line != NULL) // Se for no djoin não faz sentido dar unreg
         {
-            memset(registo, 0, sizeof(registo));
-            memset(ok_reg, 0, sizeof(ok_reg));
+            memset(registo, '\0', sizeof(registo));
+            memset(ok_reg, '\0', sizeof(ok_reg));
             sprintf(registo, "UNREG %03d %02d", my_node->net, my_node->myinfo.id); // tudo muito giro mas nao funciona se for por djoin
             printf("%s\n", registo);
             strcpy(ok_reg, udp_communication(reg_ip, reg_udp, registo));
@@ -751,18 +751,17 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
     else if (strcmp(input, "exit\n") == 0)
     {
         char registo[128], ok_reg[128];
-        char *line;
 
-        memset(registo, 0, sizeof(registo));
-        memset(ok_reg, 0, sizeof(ok_reg));
+        memset(registo, '\0', sizeof(registo));
+        memset(ok_reg, '\0', sizeof(ok_reg));
         if (my_node->net == 0)
         {
             exit(1);
         }
         else
         {
-            memset(registo, 0, sizeof(registo));
-            memset(ok_reg, 0, sizeof(ok_reg));
+            memset(registo, '\0', sizeof(registo));
+            memset(ok_reg, '\0', sizeof(ok_reg));
             sprintf(registo, "UNREG %03d %02d", my_node->net, my_node->myinfo.id); // tudo muito giro mas nao funciona se for por djoin
             printf("%s\n", registo);
             strcpy(ok_reg, udp_communication(reg_ip, reg_udp, registo));
@@ -806,10 +805,10 @@ int tcp_listener(char *port)
 
 int main(int argc, char *argv[])
 {
-    char *type, *action, *bootIP, *token;
+    char *token;
     char buffer[MAX_BUFFER_SIZE], msg[128];
     int newfd, n;
-    int client_count = 0, maxfd = 0, counter, i, j, id;
+    int client_count = 0, maxfd = 0, counter, i, j;
     struct sockaddr_in addr;
     fd_set rfds;
     socklen_t addrlen;
@@ -826,7 +825,7 @@ int main(int argc, char *argv[])
 
     memset(&my_node, 0, sizeof(my_node));
     memset(&clients, 0, sizeof(clients));
-    memset(buffer, 0, sizeof(buffer));
+    memset(buffer, '\0', sizeof(buffer));
     memset(&my_node.internos, 0, sizeof(my_node.internos));
     memset(&my_node.tabela, -1, sizeof(my_node.tabela));
     memset(&my_node.list, '\0', sizeof(my_node.list));
@@ -842,18 +841,6 @@ int main(int argc, char *argv[])
         if (strcmp(argv[1], My_IP()) != 0) // Caso o utilizador não saiba o seu id devolver o id dele
         {
             printf("Your IP is: %s\n", My_IP()); // ver qual o ip a usar
-        }
-
-        if (strcmp(argv[3], "193.136.138.142") != 0)
-        {
-            printf("Please incert in regIP: 193.136.138.142\n");
-            exit(0);
-        }
-
-        if (strcmp(argv[4], "59000") != 0)
-        {
-            printf("Please incert in regUDP: 59000\n");
-            exit(0);
         }
 
         printf("Welcome to the server please select your next command from this list:\n -join net id\n -djoin net id bootid bootIP bootTCP\n"
@@ -912,7 +899,6 @@ int main(int argc, char *argv[])
                 {
                     maxfd = newfd;
                 }
-                // printf("Client count: %d\n", client_count);
                 client_count++;
                 counter--;
             }
@@ -921,14 +907,13 @@ int main(int argc, char *argv[])
                 printf("==> a ler notificação de terminal;\n");
 
                 FD_CLR(STDIN_FILENO, &rfds);
-                memset(buffer, 0, sizeof(buffer));
+                memset(buffer, '\0', sizeof(buffer));
 
-                if ((n = read(STDIN_FILENO, buffer, 128)) < 0)
+                if ((n = read(STDIN_FILENO, buffer, 128+1)) < 0)
                     exit(1);
                 else
                 {
                     buffer[n] = '\0';
-
                     if (strcmp(buffer, "leave\n") == 0 || strcmp(buffer, "exit\n") == 0)
                     {
                         for (i = 0; i < client_count; i++)
@@ -938,7 +923,9 @@ int main(int argc, char *argv[])
                         client_count = 0;
                         memset(&clients, 0, sizeof(clients)); // Se der poop apaga
                     }
+                    printf("Aqui antes do command: %s\n", buffer);
                     commands(buffer, reg_ip, reg_udp, &my_node, &tempNode);
+                    printf("sai do command\n");
 
                     if (tempNode.fd != 0)
                     {
