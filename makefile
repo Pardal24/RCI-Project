@@ -10,4 +10,4 @@
 # 	gcc udp_client.c -o udp_client
 
 target: Summoning.c
-	gcc -g Summoning.c -o cot
+	gcc -Wall -g Summoning.c -o cot
