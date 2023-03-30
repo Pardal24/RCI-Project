@@ -864,7 +864,7 @@ int main(int argc, char *argv[])
 {
     char *token;
     char buffer[MAX_BUFFER_SIZE], msg[128];
-    int newfd, n;
+    int newfd, n, command_len = 0;
     int client_count = 0, maxfd = 0, counter, i, j;
     struct sockaddr_in addr;
     fd_set rfds;
@@ -1061,14 +1061,21 @@ int main(int argc, char *argv[])
                             else
                             {
                                 buffer[n] = '\0';
-
-                                token = strtok(buffer, "\n");
-                                while (token != NULL) // Se for no djoin não faz sentido dar unreg
+                                for (int j = 0; j < n; j++)
                                 {
-                                    strcpy(msg, token);
-                                    read_msg(&(clients[i]), &my_node, msg); // fd do no a enviar mensagem, mensagem a ler
-                                    memset(msg, '\0', sizeof(msg));
-                                    token = strtok(NULL, "\n");
+                                    char c = buffer[j];
+                                    if (c == '\n')
+                                    {
+                                        clients[i].buffer[command_len] = '\0';
+                                        read_msg(&(clients[i]), &my_node, clients[i].buffer);
+                                        memset(clients[i].buffer, '\0', sizeof(clients[i].buffer));
+                                        command_len = 0;
+                                    }
+                                    else
+                                    {
+                                        clients[i].buffer[command_len] = c;
+                                        command_len++;
+                                    }
                                 }
                             }
                         }
