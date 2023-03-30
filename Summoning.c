@@ -862,7 +862,6 @@ int tcp_listener(char *port)
 
 int main(int argc, char *argv[])
 {
-    char *token;
     char buffer[MAX_BUFFER_SIZE], msg[128];
     int newfd, n, command_len = 0;
     int client_count = 0, maxfd = 0, counter, i, j;
