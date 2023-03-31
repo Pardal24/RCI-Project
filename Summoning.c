@@ -58,32 +58,60 @@ char *My_IP() // Função para obter o meu IP
 char *udp_communication(char *IP_server, char *port, char *msg) // Envio e receção de mensagens UDP para o servidor
 {
     struct addrinfo hints, *res;
-    char *msg_rcv;
     int fd, errcode;
     ssize_t n;
+    char *msg_rcv = NULL;
+    fd_set rfds;
+    struct timeval tv;
+
     fd = socket(AF_INET, SOCK_DGRAM, 0); // UDP socket
     if (fd == -1)                        /*error*/
-        exit(1);
+        return NULL;
     memset(&hints, 0, sizeof hints);
     hints.ai_family = AF_INET;      // IPv4
     hints.ai_socktype = SOCK_DGRAM; // UDP socket
     errcode = getaddrinfo(IP_server, port, &hints, &res);
-    if (errcode != 0) /*error*/
-        exit(1);
-
+    if (errcode != 0)
+    { /*error*/
+        close(fd);
+        return NULL;
+    }
     n = sendto(fd, msg, strlen(msg), 0, res->ai_addr, res->ai_addrlen);
     if (n == -1)
     { /*error*/
-        exit(1);
+        freeaddrinfo(res);
+        close(fd);
+        return NULL;
     }
+
+    FD_ZERO(&rfds);
+    FD_SET(fd, &rfds);
+    tv.tv_sec = 1;
+    tv.tv_usec = 0;
+    int retval = select(fd + 1, &rfds, NULL, NULL, &tv);
+    if (retval == -1)
+    {
+        /* error */
+        freeaddrinfo(res);
+        close(fd);
+        return NULL;
+    }
+    else if (retval == 0)
+    {
+        /* timeout */
+        freeaddrinfo(res);
+        close(fd);
+        return NULL;
+    }
+
     struct sockaddr addr;
     socklen_t addrlen;
     char buffer[2016];
     addrlen = sizeof(addr);
-    
+
     n = recvfrom(fd, buffer, 2016, 0, &addr, &addrlen);
     if (n == -1) /*error*/
-        exit(1);
+        return NULL;
     buffer[n] = '\0';
     msg_rcv = buffer;
     close(fd);
@@ -733,7 +761,7 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
         printf("=========================\n");
         return;
     }
-    else if (strcmp(input, "sn\n") == 0) //SHOW NAMES
+    else if (strcmp(input, "sn\n") == 0) // SHOW NAMES
     {
         printf("===== SHOW NAMES =====\n");
         printf("My files are: \n");
@@ -744,19 +772,19 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
         printf("======================\n");
         return;
     }
-    else if (strcmp(input, "sr\n") == 0) //SHOW ROUTING
+    else if (strcmp(input, "sr\n") == 0) // SHOW ROUTING
     {
         printf("===== SHOW ROUTING =====\n");
         printf("My route table is: \n");
         printf("\tdestino\tvizinho\n");
-        for (int j = 0; j <= 99; j++)
+        for (int j = 0; j < MAX_CONNECTIONS; j++)
             if (my_node->tabela[j] != -1)
                 printf("\t%d\t%d\n\n", j, my_node->tabela[j]);
 
         printf("========================\n");
         return;
     }
-    else if (strcmp(input, "leave\n") == 0) 
+    else if (strcmp(input, "leave\n") == 0)
     {
         char registo[128], ok_reg[128];
         char *line;
@@ -775,20 +803,20 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
 
         line = strtok(ok_reg, "\n");
         line = strtok(NULL, "\n");
-        if (line != NULL) //Se for no djoin não faz sentido dar unreg
+        if (line != NULL) // Se for no djoin não faz sentido dar unreg
         {
             memset(registo, '\0', sizeof(registo));
             memset(ok_reg, '\0', sizeof(ok_reg));
-            sprintf(registo, "UNREG %03d %02d", my_node->net, my_node->myinfo.id); //UNREG do nó
+            sprintf(registo, "UNREG %03d %02d", my_node->net, my_node->myinfo.id); // UNREG do nó
             printf("%s\n", registo);
             strcpy(ok_reg, udp_communication(reg_ip, reg_udp, registo));
             printf("%s\n", ok_reg);
         }
 
-        //Reset às variáveis
+        // Reset às variáveis
 
         memset(&my_node->internos, 0, sizeof(my_node->internos));
-        memset(&my_node->externo, 0, sizeof(my_node->externo)); 
+        memset(&my_node->externo, 0, sizeof(my_node->externo));
         memset(my_node->tabela, -1, sizeof(my_node->tabela));
 
         my_node->myinfo.id = -1;
@@ -802,11 +830,11 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
 
         memset(registo, '\0', sizeof(registo));
         memset(ok_reg, '\0', sizeof(ok_reg));
-        if (my_node->net == -1) //se já tiver dado leave, só dá exit
+        if (my_node->net == -1) // se já tiver dado leave, só dá exit
         {
             exit(1);
         }
-        else //Caso contrário, dá leave e depois exit
+        else // Caso contrário, dá leave e depois exit
         {
             memset(registo, '\0', sizeof(registo));
             memset(ok_reg, '\0', sizeof(ok_reg));
@@ -819,7 +847,7 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
     }
 }
 
-int tcp_listener(char *port) //Função que cria um socket para o servidor TCP do nó
+int tcp_listener(char *port) // Função que cria um socket para o servidor TCP do nó
 {
     int port_tcp = atoi(port);
     int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -859,7 +887,7 @@ int main(int argc, char *argv[])
     struct sockaddr_in addr;
     fd_set rfds;
     socklen_t addrlen;
-
+    struct timeval timeout;
     time_t t;
     srand((unsigned)time(&t));
 
@@ -883,12 +911,12 @@ int main(int argc, char *argv[])
         printf("Number of arguments is wrong, you are wrong\n Call the program with: IP TCP regIP(193.136.138.142) regUDP(59000)\n");
         exit(0);
     }
-    else 
+    else
     {
-        if (strcmp(argv[1], My_IP()) != 0) //Verificar se o IP é válido
+        if (strcmp(argv[1], My_IP()) != 0) // Verificar se o IP é válido
         {
             printf("Your IP is: %s\n", My_IP()); // ver qual o ip a usar
-            exit(0); // (exit necessário devido a má invocação)
+            // exit(0);                             // (exit necessário devido a má invocação)
         }
 
         printf("Welcome to the server please select your next command from this list:\n -join net id\n -djoin net id bootid bootIP bootTCP\n"
@@ -911,7 +939,7 @@ int main(int argc, char *argv[])
 
     while (1)
     {
-        memset(&tempNode, 0, sizeof(tempNode)); //Struct temporária auxiliar 
+        memset(&tempNode, 0, sizeof(tempNode)); // Struct temporária auxiliar
 
         FD_ZERO(&rfds); // clear ao rfds
 
@@ -927,20 +955,43 @@ int main(int argc, char *argv[])
             }
         }
 
-        printf("Waiting at select()\n");
-        counter = select(maxfd + 1, &rfds, (fd_set *)NULL, (fd_set *)NULL, (struct timeval *)NULL);
+        timeout.tv_sec = 1;
+        counter = select(maxfd + 1, &rfds, (fd_set *)NULL, (fd_set *)NULL, &timeout);
 
         if (counter < 0)
         { /*error*/
             exit(1);
         }
-        else if(counter==0){
-            for(i=0; i<client_count;i++){
-                if( clients[i].id==-1 && clients[i].fd!=0){
+        else if (counter == 0) // timeout
+        {
+            for (i = 0; i < client_count; i++)
+            {
+                if (clients[i].id == -1 && clients[i].fd != 0) // se demorar muito tempo a enviar o NEW
+                {
                     close(clients[i].fd);
+                    printf("Closed a connection with one Node because it didn't send NEW in time\n");
+                    memset(&clients[i], 0, sizeof(clients[i])); // retiro da lista de clientes
+
+                    for (j = (client_count - 1); j >= 0; j--) // organização da lista de clientes
+                    {
+                        if (clients[(client_count - 1)].fd == 0) // Se no index do client_count dos clients tiver a 0, foi esse nó que saiu não é preciso mais nada
+                        {
+                            break;
+                        }
+                        else // Se o nó que saiu tiver a meio do array, meter o último nó do array e meter no lugar do que saiu
+                        {
+                            if (clients[j].fd == 0)
+                            {
+                                clients[j] = clients[(client_count - 1)];
+                                memset(&clients[(client_count - 1)], 0, sizeof(clients[(client_count - 1)])); // limpar o lugar do último nó que foi reorganizado
+                            }
+                        }
+                    }
                 }
             }
-        }else{
+        }
+        else
+        {
 
             while (counter > 0)
             {
@@ -950,13 +1001,14 @@ int main(int argc, char *argv[])
                     FD_CLR(my_node.myinfo.fd, &rfds);
                     addrlen = sizeof(addr);
                     if ((newfd = accept(my_node.myinfo.fd, (struct sockaddr *)&addr, &addrlen)) == -1) // aceita a conexão TCP
-                    { /*error*/
+                    {                                                                                  /*error*/
                         printf("Error to connecting to node");
                         counter--;
                         break;
                     }
 
                     clients[client_count].fd = newfd; // adiciona o novo cliente ao array de clientes
+                    clients[client_count].id = -1;
                     if (maxfd < newfd)
                     {
                         maxfd = newfd;
@@ -981,7 +1033,7 @@ int main(int argc, char *argv[])
                                 close(clients[i].fd);
                             }
                             client_count = 0;
-                            memset(&clients, 0, sizeof(clients)); 
+                            memset(&clients, 0, sizeof(clients));
                         }
                         commands(buffer, reg_ip, reg_udp, &my_node, &tempNode); // executa o comando
 
@@ -1003,9 +1055,9 @@ int main(int argc, char *argv[])
                 {
                     for (; counter > 0; counter--)
                     {
-                        for (i = 0; i < client_count; i++)  //Procuro o cliente que enviou a mensagem
+                        for (i = 0; i < client_count; i++) // Procuro o cliente que enviou a mensagem
                         {
-                            if (FD_ISSET(clients[i].fd, &rfds)) 
+                            if (FD_ISSET(clients[i].fd, &rfds))
                             {
                                 memset(buffer, 0, sizeof(buffer));
                                 n = read(clients[i].fd, buffer, MAX_BUFFER_SIZE);
@@ -1014,14 +1066,14 @@ int main(int argc, char *argv[])
                                     printf("Problem in reading the message\n");
                                     break;
                                 }
-                                if (n == 0) //Deteção se o cliente fechou a conexão
+                                else if (n == 0) // Deteção se o cliente fechou a conexão
                                 {
-                                    close(clients[i].fd); // Fecho a conexão do nó que saiu
-                                    leave(&(clients[i]), &my_node, &tempNode); //Retiro o nó que saiu da minha lista de vizinhos e envio a informação aos meus vizinhos
+                                    close(clients[i].fd);                      // Fecho a conexão do nó que saiu
+                                    leave(&(clients[i]), &my_node, &tempNode); // Retiro o nó que saiu da minha lista de vizinhos e envio a informação aos meus vizinhos
 
                                     memset(&clients[i], 0, sizeof(clients[i])); // retiro da lista de clientes
 
-                                    for (j = (client_count - 1); j >= 0; j--)   // organização da lista de clientes
+                                    for (j = (client_count - 1); j >= 0; j--) // organização da lista de clientes
                                     {
                                         if (clients[(client_count - 1)].fd == 0) // Se no index do client_count dos clients tiver a 0, foi esse nó que saiu não é preciso mais nada
                                         {
@@ -1037,7 +1089,7 @@ int main(int argc, char *argv[])
                                         }
                                     }
                                     client_count--;
-                                    if (tempNode.fd != 0) //Aqueles a que se ligaram ao backup precisam de adicionar um novo nó a lista
+                                    if (tempNode.fd != 0) // Aqueles a que se ligaram ao backup precisam de adicionar um novo nó a lista
                                     {
                                         clients[client_count++] = tempNode;
                                         for (int i = 0; i < client_count; i++)
@@ -1083,7 +1135,6 @@ int main(int argc, char *argv[])
                 }
             }
         }
-
     }
     return 0;
 }
