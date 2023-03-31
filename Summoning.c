@@ -80,7 +80,7 @@ char *udp_communication(char *IP_server, char *port, char *msg) // Envio e rece�
     socklen_t addrlen;
     char buffer[2016];
     addrlen = sizeof(addr);
-
+    
     n = recvfrom(fd, buffer, 2016, 0, &addr, &addrlen);
     if (n == -1) /*error*/
         exit(1);
@@ -930,109 +930,125 @@ int main(int argc, char *argv[])
         printf("Waiting at select()\n");
         counter = select(maxfd + 1, &rfds, (fd_set *)NULL, (fd_set *)NULL, (struct timeval *)NULL);
 
-        if (counter <= 0)
+        if (counter < 0)
         { /*error*/
             exit(1);
         }
+        else if(counter==0){
+            for(i=0; i<client_count;i++){
+                if( clients[i].id==-1 && clients[i].fd!=0){
+                    close(clients[i].fd);
+                }
+            }
+        }else{
 
-        while (counter > 0)
-        {
-
-            if (FD_ISSET(my_node.myinfo.fd, &rfds)) // Notificacao no meu server TCP => cria um novo socket para o cliente e adiciona-o ao array de clientes
+            while (counter > 0)
             {
-                FD_CLR(my_node.myinfo.fd, &rfds);
-                addrlen = sizeof(addr);
-                if ((newfd = accept(my_node.myinfo.fd, (struct sockaddr *)&addr, &addrlen)) == -1) // aceita a conexão TCP
-                { /*error*/
-                    printf("Error to connecting to node");
+
+                if (FD_ISSET(my_node.myinfo.fd, &rfds)) // Notificacao no meu server TCP => cria um novo socket para o cliente e adiciona-o ao array de clientes
+                {
+                    FD_CLR(my_node.myinfo.fd, &rfds);
+                    addrlen = sizeof(addr);
+                    if ((newfd = accept(my_node.myinfo.fd, (struct sockaddr *)&addr, &addrlen)) == -1) // aceita a conexão TCP
+                    { /*error*/
+                        printf("Error to connecting to node");
+                        counter--;
+                        break;
+                    }
+
+                    clients[client_count].fd = newfd; // adiciona o novo cliente ao array de clientes
+                    if (maxfd < newfd)
+                    {
+                        maxfd = newfd;
+                    }
+                    client_count++;
                     counter--;
-                    break;
                 }
-
-                clients[client_count].fd = newfd; // adiciona o novo cliente ao array de clientes
-                if (maxfd < newfd)
+                else if (FD_ISSET(STDIN_FILENO, &rfds)) // Notificao no user input => le o comando e executa-o
                 {
-                    maxfd = newfd;
-                }
-                client_count++;
-                counter--;
-            }
-            else if (FD_ISSET(STDIN_FILENO, &rfds)) // Notificao no user input => le o comando e executa-o
-            {
-                FD_CLR(STDIN_FILENO, &rfds);
-                memset(buffer, '\0', sizeof(buffer));
+                    FD_CLR(STDIN_FILENO, &rfds);
+                    memset(buffer, '\0', sizeof(buffer));
 
-                if ((n = read(STDIN_FILENO, buffer, 128 + 1)) < 0) // le o comando do user
-                    exit(1);
-                else
-                {
-                    buffer[n] = '\0';
-                    if (strcmp(buffer, "leave\n") == 0 || strcmp(buffer, "exit\n") == 0) // se o comando for leave ou exit fecha todas as conexões TCP
+                    if ((n = read(STDIN_FILENO, buffer, 128 + 1)) < 0) // le o comando do user
+                        exit(1);
+                    else
                     {
-                        for (i = 0; i < client_count; i++)
+                        buffer[n] = '\0';
+                        if (strcmp(buffer, "leave\n") == 0 || strcmp(buffer, "exit\n") == 0) // se o comando for leave ou exit fecha todas as conexões TCP
                         {
-                            close(clients[i].fd);
-                        }
-                        client_count = 0;
-                        memset(&clients, 0, sizeof(clients)); 
-                    }
-                    commands(buffer, reg_ip, reg_udp, &my_node, &tempNode); // executa o comando
-
-                    if (tempNode.fd != 0) // se o comando for join ou djoin adiciona o novo cliente ao array de clientes
-                    {
-                        clients[client_count++] = tempNode;
-                        for (i = 0; i < client_count; i++)
-                        {
-                            if (clients[i].fd > maxfd)
+                            for (i = 0; i < client_count; i++)
                             {
-                                maxfd = clients[i].fd;
+                                close(clients[i].fd);
                             }
+                            client_count = 0;
+                            memset(&clients, 0, sizeof(clients)); 
                         }
-                    }
-                }
-                counter--;
-            }
-            else // Notificacao num dos sockets de clientes TCP => le a mensagem e executa-a
-            {
-                for (; counter > 0; counter--)
-                {
-                    for (i = 0; i < client_count; i++)  //Procuro o cliente que enviou a mensagem
-                    {
-                        if (FD_ISSET(clients[i].fd, &rfds)) 
+                        commands(buffer, reg_ip, reg_udp, &my_node, &tempNode); // executa o comando
+
+                        if (tempNode.fd != 0) // se o comando for join ou djoin adiciona o novo cliente ao array de clientes
                         {
-                            memset(buffer, 0, sizeof(buffer));
-                            n = read(clients[i].fd, buffer, MAX_BUFFER_SIZE);
-                            if (n <= -1)
+                            clients[client_count++] = tempNode;
+                            for (i = 0; i < client_count; i++)
                             {
-                                printf("Problem in reading the message\n");
-                                break;
-                            }
-                            if (n == 0) //Deteção se o cliente fechou a conexão
-                            {
-                                close(clients[i].fd); // Fecho a conexão do nó que saiu
-                                leave(&(clients[i]), &my_node, &tempNode); //Retiro o nó que saiu da minha lista de vizinhos e envio a informação aos meus vizinhos
-
-                                memset(&clients[i], 0, sizeof(clients[i])); // retiro da lista de clientes
-
-                                for (j = (client_count - 1); j >= 0; j--)   // organização da lista de clientes
+                                if (clients[i].fd > maxfd)
                                 {
-                                    if (clients[(client_count - 1)].fd == 0) // Se no index do client_count dos clients tiver a 0, foi esse nó que saiu não é preciso mais nada
+                                    maxfd = clients[i].fd;
+                                }
+                            }
+                        }
+                    }
+                    counter--;
+                }
+                else // Notificacao num dos sockets de clientes TCP => le a mensagem e executa-a
+                {
+                    for (; counter > 0; counter--)
+                    {
+                        for (i = 0; i < client_count; i++)  //Procuro o cliente que enviou a mensagem
+                        {
+                            if (FD_ISSET(clients[i].fd, &rfds)) 
+                            {
+                                memset(buffer, 0, sizeof(buffer));
+                                n = read(clients[i].fd, buffer, MAX_BUFFER_SIZE);
+                                if (n <= -1)
+                                {
+                                    printf("Problem in reading the message\n");
+                                    break;
+                                }
+                                if (n == 0) //Deteção se o cliente fechou a conexão
+                                {
+                                    close(clients[i].fd); // Fecho a conexão do nó que saiu
+                                    leave(&(clients[i]), &my_node, &tempNode); //Retiro o nó que saiu da minha lista de vizinhos e envio a informação aos meus vizinhos
+
+                                    memset(&clients[i], 0, sizeof(clients[i])); // retiro da lista de clientes
+
+                                    for (j = (client_count - 1); j >= 0; j--)   // organização da lista de clientes
                                     {
-                                        break;
-                                    }
-                                    else // Se o nó que saiu tiver a meio do array, meter o último nó do array e meter no lugar do que saiu
-                                    {
-                                        if (clients[j].fd == 0)
+                                        if (clients[(client_count - 1)].fd == 0) // Se no index do client_count dos clients tiver a 0, foi esse nó que saiu não é preciso mais nada
                                         {
-                                            clients[j] = clients[(client_count - 1)];
-                                            memset(&clients[(client_count - 1)], 0, sizeof(clients[(client_count - 1)])); // limpar o lugar do último nó que foi reorganizado
+                                            break;
+                                        }
+                                        else // Se o nó que saiu tiver a meio do array, meter o último nó do array e meter no lugar do que saiu
+                                        {
+                                            if (clients[j].fd == 0)
+                                            {
+                                                clients[j] = clients[(client_count - 1)];
+                                                memset(&clients[(client_count - 1)], 0, sizeof(clients[(client_count - 1)])); // limpar o lugar do último nó que foi reorganizado
+                                            }
                                         }
                                     }
-                                }
-                                client_count--;
-                                if (tempNode.fd != 0) //Aqueles a que se ligaram ao backup precisam de adicionar um novo nó a lista
-                                {
-                                    clients[client_count++] = tempNode;
+                                    client_count--;
+                                    if (tempNode.fd != 0) //Aqueles a que se ligaram ao backup precisam de adicionar um novo nó a lista
+                                    {
+                                        clients[client_count++] = tempNode;
+                                        for (int i = 0; i < client_count; i++)
+                                        {
+                                            if (clients[i].fd > maxfd)
+                                            {
+                                                maxfd = clients[i].fd;
+                                            }
+                                        }
+                                    }
+                                    maxfd = my_node.myinfo.fd; // procuramos o novo maxfd
                                     for (int i = 0; i < client_count; i++)
                                     {
                                         if (clients[i].fd > maxfd)
@@ -1041,32 +1057,24 @@ int main(int argc, char *argv[])
                                         }
                                     }
                                 }
-                                maxfd = my_node.myinfo.fd; // procuramos o novo maxfd
-                                for (int i = 0; i < client_count; i++)
+                                else
                                 {
-                                    if (clients[i].fd > maxfd)
+                                    buffer[n] = '\0';
+                                    for (int j = 0; j < n; j++)
                                     {
-                                        maxfd = clients[i].fd;
-                                    }
-                                }
-                            }
-                            else
-                            {
-                                buffer[n] = '\0';
-                                for (int j = 0; j < n; j++)
-                                {
-                                    char c = buffer[j];
-                                    if (c == '\n')
-                                    {
-                                        clients[i].buffer[command_len] = '\0';
-                                        read_msg(&(clients[i]), &my_node, clients[i].buffer);
-                                        memset(clients[i].buffer, '\0', sizeof(clients[i].buffer));
-                                        command_len = 0;
-                                    }
-                                    else
-                                    {
-                                        clients[i].buffer[command_len] = c;
-                                        command_len++;
+                                        char c = buffer[j];
+                                        if (c == '\n')
+                                        {
+                                            clients[i].buffer[command_len] = '\0';
+                                            read_msg(&(clients[i]), &my_node, clients[i].buffer);
+                                            memset(clients[i].buffer, '\0', sizeof(clients[i].buffer));
+                                            command_len = 0;
+                                        }
+                                        else
+                                        {
+                                            clients[i].buffer[command_len] = c;
+                                            command_len++;
+                                        }
                                     }
                                 }
                             }
@@ -1075,6 +1083,7 @@ int main(int argc, char *argv[])
                 }
             }
         }
+
     }
     return 0;
 }
