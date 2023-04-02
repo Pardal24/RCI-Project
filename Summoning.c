@@ -156,6 +156,7 @@ void write_to_nb(My_Node *my_node, int vizinho, char *msg) // Mandar/reencaminha
     {
         if (write(my_node->externo.fd, msg, strlen(msg)) == -1)
         {
+            printf("Something is wrong with your connections, please try giving leave and try to reconnect.\n");
             return;
         }
     }
@@ -193,28 +194,28 @@ void write_to_all(My_Node *my_node, char *msg, int recv_from) // Mandar/reencami
     }
 }
 
-void read_msg(Node *tempNode, My_Node *my_node, char *buffer) // Função que lê e trata as mensagens recebidas por outros nós
+void read_msg(Node *tempNode, My_Node *my_node) // Função que lê e trata as mensagens recebidas por outros nós
 {
     Node extern_Node;
-
-    char name[100];
+    char name[100], msg[128];
     int dest = 0, orig = 0, id_leaving = -1;
     memset(name, '\0', sizeof(name));
     memset(&extern_Node, 0, sizeof(extern_Node));
+    strcpy(msg, tempNode->buffer);
 
-    if (sscanf(buffer, "NEW %d %s %s\n", &tempNode->id, tempNode->ip, tempNode->port)) // NEW
+    if (sscanf(msg, "NEW %d %s %s\n", &tempNode->id, tempNode->ip, tempNode->port)) // NEW
     {
         // printf("Mensagem recebida: %s\n", buffer);
-        memset(buffer, '\0', strlen(buffer));
+        memset(msg, '\0', strlen(msg));
         if (my_node->externo.id == my_node->myinfo.id) // se o meu externo for eu próprio => tou sozinho => batizar o novo nó como âncora
         {
             my_node->externo = *tempNode;
             my_node->tabela[my_node->externo.id] = my_node->externo.id;
 
-            sprintf(buffer, "EXTERN %02d %s %s\n", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
-            // printf("Mensagem enviada: %s\n", buffer);
+            sprintf(msg, "EXTERN %02d %s %s\n", my_node->myinfo.id, my_node->myinfo.ip, my_node->myinfo.port);
+            // printf("Mensagem enviada: %s\n", msg);
 
-            if (write(tempNode->fd, buffer, strlen(buffer)) == -1)
+            if (write(tempNode->fd, msg, strlen(msg)) == -1)
             {
                 printf("error: %s\n", strerror(errno));
                 exit(1);
@@ -225,26 +226,26 @@ void read_msg(Node *tempNode, My_Node *my_node, char *buffer) // Função que l�
             my_node->internos[tempNode->id] = *tempNode;
             my_node->tabela[my_node->internos[tempNode->id].id] = my_node->internos[tempNode->id].id;
 
-            sprintf(buffer, "EXTERN %02d %s %s\n", my_node->externo.id, my_node->externo.ip, my_node->externo.port); // envio o meu externo para novo o nó colocar como o seu backup
-            // printf("Mensagem envida: %s\n", buffer);
-            if (write(tempNode->fd, buffer, strlen(buffer)) == -1)
+            sprintf(msg, "EXTERN %02d %s %s\n", my_node->externo.id, my_node->externo.ip, my_node->externo.port); // envio o meu externo para novo o nó colocar como o seu backup
+            // printf("Mensagem envida: %s\n", msg);
+            if (write(tempNode->fd, msg, strlen(msg)) == -1)
             {
                 printf("error: %s\n", strerror(errno));
                 exit(1);
             }
         }
-        memset(buffer, 0, strlen(buffer));
+        memset(msg, '\0', strlen(msg));
 
-    }                                                                                                // registro o novo nó nos meus dados
-    else if (sscanf(buffer, "EXTERN %d %s %s\n", &extern_Node.id, extern_Node.ip, extern_Node.port)) // EXTERN
+    }                                                                                             // registro o novo nó nos meus dados
+    else if (sscanf(msg, "EXTERN %d %s %s\n", &extern_Node.id, extern_Node.ip, extern_Node.port)) // EXTERN
     {
-        // printf("Mensagem recebida: %s\n", buffer);
+        // printf("Mensagem recebida: %s\n", msg);
         if (tempNode->id == extern_Node.id) // Se recebi um id igual ao id de quem me enviou msg, então fui batizado como âncora
         {
             my_node->externo = *tempNode;
             my_node->tabela[my_node->externo.id] = my_node->externo.id; // add à tabela de expedição
             my_node->backup = my_node->myinfo;
-            memset(buffer, 0, strlen(buffer));
+            memset(msg, '\0', strlen(msg));
         }
         else // Caso contrário, quem me mandou mensagem é o meu externo e guardo a info do meu backup
         {
@@ -254,18 +255,17 @@ void read_msg(Node *tempNode, My_Node *my_node, char *buffer) // Função que l�
             if (my_node->backup.id != my_node->myinfo.id)
                 my_node->tabela[my_node->backup.id] = my_node->externo.id;
 
-            memset(buffer, 0, strlen(buffer));
+            memset(msg, '\0', strlen(msg));
         }
     }
-    else if (sscanf(buffer, "QUERY %d %d %s\n", &dest, &orig, name)) // QUERY
+    else if (sscanf(msg, "QUERY %d %d %s\n", &dest, &orig, name)) // QUERY
     {
         int found_name = 0, vizinho = 0;
-        char msg[128];
-        memset(msg, '\0', sizeof(msg));
         my_node->tabela[orig] = tempNode->id; // sei que para ir para o orig posso ir através do nó que me enviou a mensagem => adiciona à tabela de expedição
 
         if (my_node->myinfo.id == dest) // Se eu for o destino, respondo à mensagem
         {
+            memset(msg, '\0', sizeof(msg));
             vizinho = my_node->tabela[orig];
             for (int i = 0; i < MAX_NAMES; i++)
             {
@@ -280,28 +280,27 @@ void read_msg(Node *tempNode, My_Node *my_node, char *buffer) // Função que l�
             }
             if (found_name == 0)
             {
-                printf("I dont't have what you're looking for: %s, sorry:/", name);
+                printf("I don't have what you're looking for: %s, sorry:/\n", name);
                 sprintf(msg, "NOCONTENT %02d %02d %s\n", orig, dest, name);
                 write_to_nb(my_node, vizinho, msg);
             }
-            return;
         }
         else // Não sou o destino, reencaminho a mensagem
         {
-            memset(buffer, '\0', 1024);
-            sprintf(buffer, "QUERY %d %d %s\n", dest, orig, name);
+            memset(msg, '\0', sizeof(msg));
+            sprintf(msg, "QUERY %d %d %s\n", dest, orig, name);
             if (my_node->tabela[dest] != -1) // Se o destino já tiver na tabela, mando para o vizinho que chega ao destino
             {
                 vizinho = my_node->tabela[dest];
-                write_to_nb(my_node, vizinho, buffer);
+                write_to_nb(my_node, vizinho, msg);
             }
             else // destino não está na tabela tenho de enviar a todos os meus vizinhos
             {
-                write_to_all(my_node, buffer, tempNode->id);
+                write_to_all(my_node, msg, tempNode->id);
             }
         }
     }
-    else if (sscanf(buffer, "CONTENT %d %d %s\n", &dest, &orig, name))
+    else if (sscanf(msg, "CONTENT %d %d %s\n", &dest, &orig, name))
     {
         char msg[258];
         memset(msg, '\0', sizeof(msg));
@@ -322,15 +321,11 @@ void read_msg(Node *tempNode, My_Node *my_node, char *buffer) // Função que l�
                 int vizinho = my_node->tabela[dest];
                 write_to_nb(my_node, vizinho, msg);
             }
-            else // destino não está na tabela tenho de enviar a todos os meus vizinhos
-            {
-                write_to_all(my_node, msg, my_node->myinfo.id);
-            }
         }
     }
-    else if (sscanf(buffer, "NOCONTENT %d %d %s\n", &dest, &orig, name))
+    else if (sscanf(msg, "NOCONTENT %02d %02d %s\n", &dest, &orig, name))
     {
-        char msg[258];
+        printf("Mensagem Recebida de %d: NOCONTENT\n", tempNode->id);
         memset(msg, '\0', sizeof(msg));
         my_node->tabela[orig] = tempNode->id; // sei que para ir para o orig posso ir através do nó que me enviou a mensagem => adiciona à tabela de expedição
 
@@ -342,20 +337,21 @@ void read_msg(Node *tempNode, My_Node *my_node, char *buffer) // Função que l�
         else // Caso contrário, reencaminho a mensagem
         {
             sprintf(msg, "NOCONTENT %d %d %s\n", dest, orig, name);
-
+            printf("Vou enviar NOCONTENT\n");
             if (my_node->tabela[dest] != -1) // Se o destino já tiver na tabela, mando para o vizinho que chega ao destino
             {
                 int vizinho = my_node->tabela[dest];
                 write_to_nb(my_node, vizinho, msg);
             }
-            else // destino não está na tabela tenho de enviar a todos os meus vizinhos
-            {
-                write_to_all(my_node, msg, my_node->myinfo.id);
-            }
+            // else // destino não está na tabela tenho de enviar a todos os meus vizinhos
+            // {
+            //     write_to_all(my_node, msg, my_node->myinfo.id);
+            // }
         }
     }
-    else if (sscanf(buffer, "WITHDRAW %d", &id_leaving))
+    else if (sscanf(msg, "WITHDRAW %d", &id_leaving))
     {
+        memset(msg, '\0', sizeof(msg));
         my_node->tabela[id_leaving] = -1; // retira o nó como destino que saiu da tabela de expedição (set a -1)
 
         for (int i = 0; i < MAX_CONNECTIONS; i++)
@@ -365,7 +361,8 @@ void read_msg(Node *tempNode, My_Node *my_node, char *buffer) // Função que l�
                 my_node->tabela[i] = -1; // retira todas as entradas da tabela que requerem enviar para o nó que saiu
             }
         }
-        write_to_all(my_node, buffer, tempNode->id); // reencaminha a mensagem para todos os meus vizinhos, menos para o nó que enviou a mensagem
+        sprintf(msg, "WITHDRAW %d\n", id_leaving);
+        write_to_all(my_node, msg, tempNode->id); // reencaminha a mensagem para todos os meus vizinhos, menos para o nó que enviou a mensagem
     }
 }
 
@@ -531,8 +528,8 @@ void leave(Node *leaving_node, My_Node *my_node, Node *tempNode) // Função que
                         sprintf(msg_send, "EXTERN %02d %s %s\n", my_node->externo.id, my_node->externo.ip, my_node->externo.port);
                         if (write(my_node->externo.fd, msg_send, strlen(msg_send)) == -1)
                         {
-                            printf("error: %s\n", strerror(errno));
-                            exit(1);
+                            printf("Error sending message: %s", msg_send);
+                            return;
                         }
                         memset(&my_node->internos[i], 0, sizeof(my_node->internos[i]));
                         first_intern = 1;
@@ -541,8 +538,8 @@ void leave(Node *leaving_node, My_Node *my_node, Node *tempNode) // Função que
                     {
                         if (write(my_node->internos[i].fd, msg_send, strlen(msg_send)) == -1)
                         {
-                            printf("error: %s\n", strerror(errno));
-                            exit(1);
+                            printf("Error sending message: %s", msg_send);
+                            return;
                         }
                     }
                     interno = 1;
@@ -957,7 +954,7 @@ int main(int argc, char *argv[])
             }
         }
 
-        timeout.tv_sec = 1;
+        timeout.tv_sec = 2;
         counter = select(maxfd + 1, &rfds, (fd_set *)NULL, (fd_set *)NULL, &timeout);
 
         if (counter < 0)
@@ -1116,12 +1113,11 @@ int main(int argc, char *argv[])
                                     for (int j = 0; j < n; j++)
                                     {
                                         char c = buffer[j];
-                                        printf("%c\n", c);
                                         if (c == '\n')
                                         {
                                             clients[i].buffer[command_len] = '\0';
-                                            read_msg(&(clients[i]), &my_node, clients[i].buffer);
-                                            memset(clients[i].buffer, '\0', sizeof(clients[i].buffer));
+                                            read_msg(&(clients[i]), &my_node);
+                                            memset(clients[i].buffer, '\0', sizeof(128));
                                             command_len = 0;
                                         }
                                         else
