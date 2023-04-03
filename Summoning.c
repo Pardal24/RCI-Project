@@ -704,6 +704,7 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
                 break;
             }
         }
+        return;
     }
     else if (sscanf(input, "delete %s", name)) // Apaga um nome da lista
     {
@@ -822,6 +823,7 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
         my_node->net = -1;
         my_node->externo = my_node->myinfo; // volto a meter na forma default
         my_node->backup = my_node->myinfo;
+        return;
     }
     else if (strcmp(input, "exit\n") == 0)
     {
@@ -843,6 +845,7 @@ void commands(char *input, char *reg_ip, char *reg_udp, My_Node *my_node, Node *
             printf("%s\n", ok_reg);
             exit(1);
         }
+        return;
     }
 }
 
@@ -903,6 +906,7 @@ int main(int argc, char *argv[])
     memset(&my_node.internos, 0, sizeof(my_node.internos));
     memset(&my_node.tabela, -1, sizeof(my_node.tabela));
     memset(&my_node.list, '\0', sizeof(my_node.list));
+    memset(&my_node.myinfo.buffer, '\0', sizeof(my_node.myinfo.buffer));
     memset(msg, '\0', sizeof(msg));
 
     if (argc != 5) // Verificar se o utilizador colocou os argumentos todos
